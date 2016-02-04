@@ -114,6 +114,17 @@ int TestShear() {
       ++nb_fails;
    }
 
+   A = Covariance4D<Vector>(1.0, 2.0, 0.0, 0.0);
+   B = Covariance4D<Vector>(0.0, 0.0, 1.0, 2.0);
+   A.Travel(1);
+   A.Curvature(-1, -1);
+   if(!IsApprox(A, B)) {
+      std::cerr << "Error: Curvature + Travel incorrect" << std::endl;
+      std::cerr << A << std::endl;
+      std::cerr << B << std::endl;
+      ++nb_fails;
+   }
+
    return nb_fails;
 }
 

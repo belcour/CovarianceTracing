@@ -5,8 +5,9 @@ project (CovarianceTracing CXX)
 set(CMAKE_BUILD_TYPE DEBUG)
 
 if ( CMAKE_COMPILER_IS_GNUCC )
-   add_definitions ("-Wall -pedantic")
+   add_definitions ("-Wall -pedantic -fopenmp")
 endif ( CMAKE_COMPILER_IS_GNUCC )
+add_definitions ("-O3")
 
 include_directories ("include" ".")
 
@@ -19,3 +20,6 @@ target_compile_features(TestCovariance4D PRIVATE cxx_range_for)
 
 enable_testing()
 add_test(TestCovariance4D TestCovariance4D)
+
+add_executable (SmallCov tutorials/path.cpp)
+target_compile_features(SmallCov PRIVATE cxx_range_for)

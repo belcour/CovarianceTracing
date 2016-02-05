@@ -292,6 +292,53 @@ int TestReflection() {
    return nb_fails;
 }
 
+int TestOrientation() {
+   int nb_fails = 0;
+
+   std::array<float, 10> matrix;
+   float r, k;
+   Vector x, y, z, n, o;
+   Covariance4D<Vector> A, B;
+
+   {
+   matrix = {1.0,
+             0.0, 3.0,
+             0.0, 0.0, 5.0,
+             0.0, 0.0, 0.0, 7.0};
+   r = std::numeric_limits<float>::max();
+   k = 0.0;
+   x = Vector( 0, 1, 0);
+   y = Vector( 1, 0, 1); y.Normalize();
+   z = Vector( 1, 0,-1); z.Normalize();
+   n = Vector( 0, 0, 1);
+   o = Vector( 0, 1, 1); o.Normalize();
+   A = Covariance4D<Vector>(matrix, x, y, z);
+   B = A;
+   //std::cout << "A: " << A << std::endl;
+   A.Projection(n);
+   //std::cout << "After proj: " << A << std::endl;
+   A.Curvature(k, k);
+   //std::cout << "After curv: " << A << std::endl;
+   A.Symmetry();
+   //std::cout << "After symm: " << A << std::endl;
+   A.Reflection(r, r);
+   //std::cout << "After refl: " << A << std::endl;
+   A.Curvature(-k, -k);
+   //std::cout << "After icur: " << A << std::endl;
+   A.InverseProjection(o);
+   //std::cout << "After ipro: " << A << std::endl;
+   if(A.matrix[5] != B.matrix[9] && A.matrix[9] != B.matrix[5] &&
+      A.matrix[8] != B.matrix[8]) {
+      std::cerr << "Error: Specular curved reflection preserve angular content" << std::endl;
+      std::cerr << "       but increase spatial content." << std::endl;
+      std::cerr << A << std::endl;
+      std::cerr << B << std::endl;
+      ++nb_fails;
+   }}
+
+   return nb_fails;
+}
+
 int main(int argc, char** argv) {
    int nb_fails = 0;
    std::cout << std::fixed << std::showpos << std::setprecision(2);
@@ -300,6 +347,7 @@ int main(int argc, char** argv) {
    nb_fails += TestShear();
    nb_fails += TestProjection();
    nb_fails += TestReflection();
+   nb_fails += TestOrientation();
 
    if(nb_fails > 0) {
       return EXIT_FAILURE;

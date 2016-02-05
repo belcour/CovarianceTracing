@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 
+#define MAX_SQRT_FLOAT 1.0E19
+
 namespace Covariance {
 
    /* The 4D version of Covariance Tracing.
@@ -79,12 +81,10 @@ namespace Covariance {
        * 'svv' the covariance of the BRDF along the Y axis.
        */
       inline void Reflection(float suu, float svv) {
-         ProductUV(suu, svv);
-      }
-
-      /* Reflection operator
-       */
-      inline void Refraction() {
+         if(suu < MAX_SQRT_FLOAT &&
+            svv < MAX_SQRT_FLOAT) {
+            ProductUV(suu, svv);
+         }
       }
 
 
@@ -102,52 +102,63 @@ namespace Covariance {
 
          const auto cx = Vector::Dot(x, n);
          const auto cy = Vector::Dot(y, n);
-         if(cx == 0.0f) { return; }
 
          // Rotate the Frame to be aligned with plane.
-         const float alpha = atan2(cx, cy);
+         const float alpha = (cx != 0.0) ? atan2(cx, cy) : 0.0;
          const float c = cos(alpha), s = -sin(alpha);
          Rotate(c, s);
 
          // Scale the componnent that project by the cosine of the ray direction
          // and the normal.
-         const float cosine = std::abs(Vector::Dot(z, n));
-         ScaleY(cosine);
+         const float cosine = Vector::Dot(z, n);
+         //if(cosine < 0.0f) { ScaleV(-1.0f); }
+         ScaleY(std::abs(cosine));
 
          // Update direction vectors.
-         const auto temp = c*x + s*y;
-         z = n;
-         y = c*y - s*x;
-         x = temp;
+         x = c*x + s*y;
+         z = (cosine < 0.0f) ? -n : n;
+         y = (cosine < 0.0f) ?  Vector::Cross(x, z) : Vector::Cross(z, x);
       }
 
-      //! Perform the projection of a lightfield defined on a surface to an
-      //! outgoing direction. This function assumes that the lightfield main
-      //! vector is the surface normal and that the outgoing vector is in the
-      //! same direction.
-      //!
-      //! \param out_d the outgoing direction.
+      /* Perform the projection of a lightfield defined on a surface to an
+       * outgoing direction. This function assumes that the lightfield main
+       * vector is the surface normal and that the outgoing vector is in the
+       * same direction.
+       *
+       * 'd' the outgoing direction.
+       */
       inline void InverseProjection(const Vector& d) {
 
          const auto cx = Vector::Dot(x, d);
          const auto cy = Vector::Dot(y, d);
-         if(cx == 0.0f) { return; }
 
          // Rotate the Frame to be aligned with plane.
-         const float alpha = atan2(cx, cy);
+         const float alpha = (cx != 0.0) ? atan2(cx, cy) : 0.0;
          const float c = cos(alpha), s = -sin(alpha);
          Rotate(c, s); // Rotate of -alpha
 
          // Scale the componnent that project by the inverse cosine of the ray
          // direction and the normal.
-         const float cosine = std::abs(Vector::Dot(z, d));
+         const float cosine = Vector::Dot(z, d);
+         if(cosine < 0.0f) { ScaleV(-1.0f); }
          ScaleY(1.0/cosine);
 
          // Update direction vectors.
-         const auto temp = c*x + s*y;
+         x = c*x + s*y;
          z = d;
-         y = c*y - s*x;
-         x = temp;
+         y = Vector::Cross(z, x);
+      }
+
+
+      /* Note: for the case of tracking the local frame of the light field
+       * performing the symmetry makes not difference since the local frame
+       * is ajusted with respect to symmetry.
+       */
+      inline void Symmetry() {
+         matrix[3] = -matrix[3];
+         matrix[4] = -matrix[4];
+         matrix[6] = -matrix[6];
+         matrix[7] = -matrix[7];
       }
 
 
@@ -259,18 +270,6 @@ namespace Covariance {
          matrix[4] = c2 * cov_yu + cs * (cov_yv - cov_xu) - s2 * cov_xv;
          matrix[6] = c2 * cov_xv + cs * (cov_yv - cov_xu) - s2 * cov_yu;
          matrix[7] = c2 * cov_yv - cs * (cov_xv + cov_yu) + s2 * cov_xu;
-      }
-
-
-      ////////////////////////
-      //  Symmetry of space //
-      ////////////////////////
-
-      inline void Symmetry() {
-         matrix[3] = -matrix[3];
-         matrix[4] = -matrix[4];
-         matrix[6] = -matrix[6];
-         matrix[7] = -matrix[7];
       }
 
 

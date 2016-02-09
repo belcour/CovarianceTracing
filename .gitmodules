@@ -1,0 +1,3 @@
+[submodule "modules/tinyexr"]
+	path = modules/tinyexr
+	url = https://github.com/syoyo/tinyexr.git

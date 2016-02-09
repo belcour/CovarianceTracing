@@ -1,3 +1,4 @@
+// STL includes
 #include <cstdlib>
 #include <cstdio>
 #include <random>
@@ -6,12 +7,15 @@
 std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
 
+// Local includes
 #include "common.hpp"
 
+// Covariance Tracing includes
 #include <Covariance/Covariance4D.hpp>
 using namespace Covariance;
 using Cov    = Covariance4D<Vector>;
 using RadCov = std::pair<Vector, Cov>;
+
 
 Sphere spheres[] = {
    Sphere(Vector( 1e5+1,40.8,81.6),  1e5,  Vector(),Vector(.75,.25,.25)),//Left
@@ -53,6 +57,7 @@ RadCov radiance(const Ray &r, int depth){
            u, v, w);
 
    cov.Curvature(k, k);
+   cov.Cosine(1.0f);
    cov.Symmetry();
    cov.Reflection(10.0, 10.0);
    cov.Curvature(-k, -k);
@@ -89,36 +94,54 @@ int main(int argc, char** argv){
                for (int s=0; s<samps; s++){
                   double r1=2*dist(gen), dx=r1<1 ? sqrt(r1)-1: 1-sqrt(2-r1);
                   double r2=2*dist(gen), dy=r2<1 ? sqrt(r2)-1: 1-sqrt(2-r2);
+                  
+                  // Generate the pixel direction
                   Vector d = cx*( ( (sx+.5 + dx)/2 + x)/w - .5) +
                              cy*( ( (sy+.5 + dy)/2 + y)/h - .5) + cam.d;
+                  d.Normalize();
+                  
+                  const Vector px = (cx - Vector::Dot(d, cx)*d).Normalize(),
+                               py = (cy - Vector::Dot(d, cy)*d).Normalize();
+                  const float scaleX = 1.0f / float(w),
+			                  scaleY = 1.0f / float(h);
 
                   // Evaluate the Covariance and Radiance at the pixel location
                   auto radcov = radiance(Ray(cam.o+d*140,d.Normalize()),0);
                   auto cov = radcov.second;
                   
-                  // Orient the covariance
+                  // Orient the covariance and scale it to be in pixel-2
                   float cr, sr;
-                  cr = Vector::Dot(cov.x, cx);
-                  sr = Vector::Dot(cov.x, cy);
-                  cov.Rotate(cr, -sr);
+                  cr = Vector::Dot(cov.x, px);
+                  sr = Vector::Dot(cov.x, py);
+                  cov.Rotate(cr, sr);
+                  cov.ScaleU(scaleX);
+                  cov.ScaleV(scaleY);
+                
 
                   // What do you want to see?
                   Vector rgb;
 
                   //  1) The angular part of the covariance
                   rgb = Vector(std::fabs(cov.matrix[5]),
-                                          std::fabs(cov.matrix[8]),
-                                          std::fabs(cov.matrix[9]));
+                               std::fabs(cov.matrix[8]),
+                               std::fabs(cov.matrix[9]));
+/*/ 
                   //  2) The spatial part of the covariance
                   rgb = Vector(std::fabs(cov.matrix[0]),
-                                          std::fabs(cov.matrix[1]),
-                                          std::fabs(cov.matrix[2]));
+                               std::fabs(cov.matrix[1]),
+                               std::fabs(cov.matrix[2]));
+                //   rgb = Vector(std::fabs(cr), 0.0, std::fabs(sr));     
+//*                  
                   //  3) Density
                   float den;
                   den = cov.matrix[0]*cov.matrix[2]-pow(cov.matrix[1], 2);
                   den = sqrt(den);
                   rgb = Vector(den, den, den);
-
+                  
+                  //  4) Radiance
+                  auto rad = radcov.first;
+                  rgb = Vector(std::fabs(rad.x), std::fabs(rad.y), std::fabs(rad.z));
+*/
                   r = r + rgb*(1.f/samps);
                } // Camera rays are pushed ^^^^^ forward to start in interior
                c[i] = c[i] + Vector(Clamp(r.x),Clamp(r.y),Clamp(r.z))*.25;
@@ -126,10 +149,7 @@ int main(int argc, char** argv){
          }
       }
    }
-   FILE *f = fopen("image.ppm", "w");         // Write image to PPM file.
-   fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
-   for (int i=0; i<w*h; i++) {
-      fprintf(f,"%d %d %d ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
-   }
+   
+   return SaveEXR(c, w, h, "image.exr");
 }
 

@@ -9,7 +9,7 @@ if ( CMAKE_COMPILER_IS_GNUCC )
 endif ( CMAKE_COMPILER_IS_GNUCC )
 add_definitions ("-O3")
 
-include_directories ("include" ".")
+include_directories ("include" "modules" ".")
 
 # Add dependencies
 find_package(Threads REQUIRED)

@@ -1,7 +1,10 @@
 #pragma once
 
+// Include STL
 #include <cmath>
 #include <iostream>
+#include <string>
+#include <vector>
 
 double Clamp(double x) {
    return x<0 ? 0 : x>1 ? 1 : x;
@@ -117,3 +120,54 @@ struct Sphere {
       return (t=b-det)>eps ? t : ((t=b+det)>eps ? t : 0);
    }
 };
+
+
+// TinyEXR includes
+#define TINYEXR_IMPLEMENTATION
+#include <tinyexr/tinyexr.h>
+
+int SaveEXR(const Vector* img, int w, int h, const std::string& filename) {
+   EXRImage image;
+   InitEXRImage(&image);
+   image.num_channels  = 3;
+   const char* names[] = {"B", "G", "R"};
+   
+    std::vector<float> images[3];
+    images[0].resize(w * h);
+    images[1].resize(w * h);
+    images[2].resize(w * h);
+
+    for (int i = 0; i < w * h; i++) {
+      images[0][i] = img[i].x;
+      images[1][i] = img[i].y;
+      images[2][i] = img[i].z;
+    }
+
+    float* image_ptr[3];
+    image_ptr[0] = &(images[2].at(0)); // B
+    image_ptr[1] = &(images[1].at(0)); // G
+    image_ptr[2] = &(images[0].at(0)); // R
+
+    image.channel_names = names;
+    image.images = (unsigned char**)image_ptr;
+    image.width = w;
+    image.height = h;
+    image.compression = TINYEXR_COMPRESSIONTYPE_ZIP;
+    
+    image.pixel_types = (int *)malloc(sizeof(int) * image.num_channels);
+    image.requested_pixel_types = (int *)malloc(sizeof(int) * image.num_channels);
+    for (int i = 0; i < image.num_channels; i++) {
+      image.pixel_types[i] = TINYEXR_PIXELTYPE_FLOAT; // pixel type of input image
+      image.requested_pixel_types[i] = TINYEXR_PIXELTYPE_HALF; // pixel type of output image to be stored in .EXR
+    }
+
+    const char* err;
+    int ret = SaveMultiChannelEXRToFile(&image, filename.c_str(), &err);
+    if (ret != 0) {
+      fprintf(stderr, "Save EXR err: %s\n", err);
+    }
+
+    free(image.pixel_types);
+    free(image.requested_pixel_types);
+    return ret;
+}

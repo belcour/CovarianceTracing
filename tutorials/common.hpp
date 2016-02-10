@@ -31,6 +31,12 @@ struct Vector {
       r.z = z/norm;
       return r;
    }
+   static float Norm(const Vector& a) {
+       return sqrt(Vector::Dot(a, a));
+   }
+   bool IsNull() const {
+    return x==0.0f && y==0.0f && z==0.0f;
+   }
    Vector Reflect(const Vector& w, const Vector& n) {
       Vector r;
       const double dot = Dot(w, n);

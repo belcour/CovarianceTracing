@@ -27,7 +27,7 @@ Sphere spheres[] = {
    Sphere(Vector(27,16.5,47),        16.5, Vector(),Vector(1,1,1)*.999),//Mirr
    Sphere(Vector(73,16.5,78),        16.5, Vector(),Vector(1,1,1)*.999),//Glas
    Sphere(Vector(50,681.6-.27,81.6), 600,  Vector(12,12,12),  Vector()) //Lite
- };
+};
 
 
 inline bool intersect(const Ray &r, double &t, int &id){
@@ -53,70 +53,107 @@ RadCov radiance(const Ray &r, int depth){
    Vector u = Vector::Cross((fabs(w.x) > .1 ? Vector(0,1,0) : Vector(1,0,0)), w).Normalize();
    Vector v = Vector::Cross(w, u);
 
-   Cov cov({ 0.0, 0.0, 0.0, 0.0, 0.0, 1.0E5, 0.0, 0.0, 0.0, 1.0E5 },
-           u, v, w);
+   // If the object is a source, return the its covariance. A source has a
+   // constant angular emission but has bounded spatial extent. Since there
+   // is no way here to infer the extent of the source, its frequency is
+   // defined as 1.0E5. 
+   if(!obj.ke.IsNull()) {
+      Cov cov({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, u, v, w);
+      cov.InverseProjection(-r.d);
+      cov.Travel(t);
+      return RadCov(obj.ke, cov) ;
 
-   cov.Curvature(k, k);
-   cov.Cosine(1.0f);
-   cov.Symmetry();
-   cov.Reflection(10.0, 10.0);
-   cov.Curvature(-k, -k);
-   cov.InverseProjection(-r.d);
-   cov.Travel(t);
-   
-   return RadCov(f, cov);
-   //return Vector(cov.matrix[0], cov.matrix[1], cov.matrix[2]);
+   // Terminate the recursion after a finite number of call. Since this
+   // implementation is recursive and passing covariance objects, the
+   // number of max bounces is deterministic. 
+   } else if(depth>1) {
+      Cov cov({ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, u, v, w);
+      cov.InverseProjection(-r.d);
+      return RadCov(Vector(), cov) ;
 
-   /*
-   if (++depth>5) { return obj.ke; }
+   // Main covariance computation. First this code generate a new direction
+   // and query the covariance+radiance in that direction. Then, it computes
+   // the covariance after the reflection/refraction.
+   } else {
+      /* Sampling a new direction + recursive call */
+      double r1=2*M_PI*dist(gen), r2=dist(gen), r2s=sqrt(r2);
+      Vector w = nl;
+      Vector u = Vector::Cross((fabs(w.x) > .1 ? Vector(0,1,0) : Vector(1,0,0)), w).Normalize();
+      Vector v = Vector::Cross(w, u);
+      Vector d = (u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrt(1-r2)).Normalize();
+      const RadCov radcov = radiance(Ray(x,d), depth+1);
 
-   double r1=2*M_PI*dist(gen), r2=dist(gen), r2s=sqrt(r2);
-   Vector w = nl;
-   Vector u = Vector::Cross((fabs(w.x) > .1 ? Vector(0,1,0) : Vector(1,0,0)), w).Normalize(),
-   Vector v = Vector::Cross(w, u);
-   Vector d = (u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrt(1-r2)).Normalize();
-   return obj.ke + f.Multiply(radiance(Ray(x,d),depth));
-   */
- }
+      /* Covariance computation */
+      Covariance4D<Vector> cov = radcov.second;
+      cov.Projection(nl);
+      cov.Curvature(k, k);
+      cov.Cosine(Vector::Dot(nl, d));
+      cov.Symmetry();
+      cov.Reflection(1.0, 1.0);
+      cov.Curvature(-k, -k);
+      cov.InverseProjection(-r.d);
+      cov.Travel(t);
+      return RadCov(f.Multiply(radcov.first), cov);
+   }
+}
 
-inline int toInt(double x){ return int(pow(Clamp(x),1/2.2)*255+.5); }
+#include <xmmintrin.h>
 
 int main(int argc, char** argv){
    int w=1024, h=768, samps = argc==2 ? atoi(argv[1])/4 : 1; // # samples
    Ray cam(Vector(50,52,295.6), Vector(0,-0.042612,-1).Normalize()); // cam pos, dir
-   Vector cx=Vector(w*.5135/h), cy=(Vector::Cross(cx, cam.d)).Normalize()*.5135, r, *c=new Vector[w*h];
-   #pragma omp parallel for schedule(dynamic, 1) private(r)
-   for (int y=0; y<h; y++){                       // Loop over image rows
+   Vector cx=Vector(w*.5135/h), cy=(Vector::Cross(cx, cam.d)).Normalize()*.5135, *img=new Vector[w*h];
+
+   _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
+
+   // Loop over the rows and columns of the image and evaluate radiance and
+   // covariance per pixel using Monte-Carlo.
+   #pragma omp parallel for schedule(dynamic, 1) private(gen)
+   for (int y=0; y<h; y++){
       fprintf(stderr,"\rRendering (%d spp) %5.2f%%",samps*4,100.*y/(h-1));
-      for (unsigned short x=0; x<w; x++) {  // Loop cols
-         for (int sy=0, i=(h-y-1)*w+x; sy<2; sy++) {     // 2x2 subpixel rows
-            for (int sx=0; sx<2; sx++, r=Vector()){        // 2x2 subpixel cols
+      for (unsigned short x=0; x<w; x++) {
+
+         Vector r;
+         Covariance4D<Vector> _cov;
+
+         // Sub pixel sampling
+         for (int sy=0, i=(h-y-1)*w+x; sy<2; sy++) {
+            for (int sx=0; sx<2; sx++){
                for (int s=0; s<samps; s++){
+
+                  // Generate a sub-pixel random position to perform super
+                  // sampling.
                   double r1=2*dist(gen), dx=r1<1 ? sqrt(r1)-1: 1-sqrt(2-r1);
                   double r2=2*dist(gen), dy=r2<1 ? sqrt(r2)-1: 1-sqrt(2-r2);
-                  
+
                   // Generate the pixel direction
                   Vector d = cx*( ( (sx+.5 + dx)/2 + x)/w - .5) +
                              cy*( ( (sy+.5 + dy)/2 + y)/h - .5) + cam.d;
                   d.Normalize();
-                  
+
+                  // Covariance tracing requires to know the pixel frame in order to
+                  // align the orientation of the covariance matrix with respect to
+                  // the image plane. (cx, cy, d) is not a proper frame and we need
+                  // to correct it.
                   const Vector px = (cx - Vector::Dot(d, cx)*d).Normalize(),
                                py = (cy - Vector::Dot(d, cy)*d).Normalize();
-                  const float scaleX = 1.0f / float(w),
-			                  scaleY = 1.0f / float(h);
+                  const float scaleX = Vector::Norm(cx) / float(w),
+                              scaleY = Vector::Norm(cy) / float(h);
 
                   // Evaluate the Covariance and Radiance at the pixel location
                   auto radcov = radiance(Ray(cam.o+d*140,d.Normalize()),0);
+                  auto rad = radcov.first;
                   auto cov = radcov.second;
-                  
-                  // Orient the covariance and scale it to be in pixel-2
+
+                  // Orient the covariance and scale it to be in pixel^{-2} and not
+                  // in meter^{-2} or rad^{-2}.
                   float cr, sr;
                   cr = Vector::Dot(cov.x, px);
                   sr = Vector::Dot(cov.x, py);
                   cov.Rotate(cr, sr);
                   cov.ScaleU(scaleX);
                   cov.ScaleV(scaleY);
-                
+
 
                   // What do you want to see?
                   Vector rgb;
@@ -125,31 +162,39 @@ int main(int argc, char** argv){
                   rgb = Vector(std::fabs(cov.matrix[5]),
                                std::fabs(cov.matrix[8]),
                                std::fabs(cov.matrix[9]));
-/*/ 
+/*/
                   //  2) The spatial part of the covariance
                   rgb = Vector(std::fabs(cov.matrix[0]),
                                std::fabs(cov.matrix[1]),
                                std::fabs(cov.matrix[2]));
-                //   rgb = Vector(std::fabs(cr), 0.0, std::fabs(sr));     
-//*                  
+                  //rgb = Vector(std::fabs(cr), 0.0, std::fabs(sr));
+//*
                   //  3) Density
                   float den;
                   den = cov.matrix[0]*cov.matrix[2]-pow(cov.matrix[1], 2);
                   den = sqrt(den);
                   rgb = Vector(den, den, den);
-                  
+
                   //  4) Radiance
-                  auto rad = radcov.first;
-                  rgb = Vector(std::fabs(rad.x), std::fabs(rad.y), std::fabs(rad.z));
-*/
-                  r = r + rgb*(1.f/samps);
-               } // Camera rays are pushed ^^^^^ forward to start in interior
-               c[i] = c[i] + Vector(Clamp(r.x),Clamp(r.y),Clamp(r.z))*.25;
+                  //rgb = Vector(std::fabs(rad.x), std::fabs(rad.y), std::fabs(rad.z));
+//*/
+                  _cov.Add(cov, Vector::Norm(r), Vector::Norm(rgb));
+                  r = (r*float(s) + rgb)*(1.f/(s+1.f));
+               }
+
+               auto c = Vector(std::fabs(_cov.matrix[5]),
+                          std::fabs(_cov.matrix[8]),
+                          std::fabs(_cov.matrix[9]));
+               img[i] = img[i] + c*.25;
             }
          }
       }
    }
-   
-   return SaveEXR(c, w, h, "image.exr");
+
+   // Output image
+   const auto ret = SaveEXR(img, w, h, "image.exr");
+
+   delete[] img;
+   return ret;
 }
 

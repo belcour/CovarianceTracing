@@ -7,7 +7,7 @@ set(CMAKE_BUILD_TYPE DEBUG)
 if ( CMAKE_COMPILER_IS_GNUCC )
    add_definitions ("-Wall -pedantic -fopenmp")
 endif ( CMAKE_COMPILER_IS_GNUCC )
-add_definitions ("-O3")
+#add_definitions ("-O3")
 
 include_directories ("include" "modules" ".")
 

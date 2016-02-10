@@ -56,16 +56,16 @@ RadCov radiance(const Ray &r, int depth){
    // If the object is a source, return the its covariance. A source has a
    // constant angular emission but has bounded spatial extent. Since there
    // is no way here to infer the extent of the source, its frequency is
-   // defined as 1.0E5. 
+   // defined as 1.0E5.
    if(!obj.ke.IsNull()) {
-      Cov cov({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, u, v, w);
+      Cov cov({ 1.0E2, 0.0, 1.0E2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, u, v, w);
       cov.InverseProjection(-r.d);
       cov.Travel(t);
       return RadCov(obj.ke, cov) ;
 
    // Terminate the recursion after a finite number of call. Since this
    // implementation is recursive and passing covariance objects, the
-   // number of max bounces is deterministic. 
+   // number of max bounces is deterministic.
    } else if(depth>1) {
       Cov cov({ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, u, v, w);
       cov.InverseProjection(-r.d);
@@ -87,7 +87,7 @@ RadCov radiance(const Ray &r, int depth){
       Covariance4D<Vector> cov = radcov.second;
       cov.Projection(nl);
       cov.Curvature(k, k);
-      cov.Cosine(Vector::Dot(nl, d));
+      cov.Cosine(1.0f);
       cov.Symmetry();
       cov.Reflection(1.0, 1.0);
       cov.Curvature(-k, -k);
@@ -102,7 +102,9 @@ RadCov radiance(const Ray &r, int depth){
 int main(int argc, char** argv){
    int w=1024, h=768, samps = argc==2 ? atoi(argv[1])/4 : 1; // # samples
    Ray cam(Vector(50,52,295.6), Vector(0,-0.042612,-1).Normalize()); // cam pos, dir
-   Vector cx=Vector(w*.5135/h), cy=(Vector::Cross(cx, cam.d)).Normalize()*.5135, *img=new Vector[w*h];
+   Vector  cx  = Vector(w*.5135/h);
+   Vector  cy  = Vector::Cross(cx, cam.d).Normalize()*.5135;
+   Vector* img = new Vector[w*h];
 
    _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
 
@@ -113,12 +115,13 @@ int main(int argc, char** argv){
       fprintf(stderr,"\rRendering (%d spp) %5.2f%%",samps*4,100.*y/(h-1));
       for (unsigned short x=0; x<w; x++) {
 
-         Vector r;
-         Covariance4D<Vector> _cov;
-
          // Sub pixel sampling
          for (int sy=0, i=(h-y-1)*w+x; sy<2; sy++) {
             for (int sx=0; sx<2; sx++){
+
+               Vector _r;
+               Covariance4D<Vector> _cov;
+
                for (int s=0; s<samps; s++){
 
                   // Generate a sub-pixel random position to perform super
@@ -154,37 +157,35 @@ int main(int argc, char** argv){
                   cov.ScaleU(scaleX);
                   cov.ScaleV(scaleY);
 
-
-                  // What do you want to see?
-                  Vector rgb;
-
-                  //  1) The angular part of the covariance
-                  rgb = Vector(std::fabs(cov.matrix[5]),
-                               std::fabs(cov.matrix[8]),
-                               std::fabs(cov.matrix[9]));
-/*/
-                  //  2) The spatial part of the covariance
-                  rgb = Vector(std::fabs(cov.matrix[0]),
-                               std::fabs(cov.matrix[1]),
-                               std::fabs(cov.matrix[2]));
-                  //rgb = Vector(std::fabs(cr), 0.0, std::fabs(sr));
-//*
-                  //  3) Density
-                  float den;
-                  den = cov.matrix[0]*cov.matrix[2]-pow(cov.matrix[1], 2);
-                  den = sqrt(den);
-                  rgb = Vector(den, den, den);
-
-                  //  4) Radiance
-                  //rgb = Vector(std::fabs(rad.x), std::fabs(rad.y), std::fabs(rad.z));
-//*/
-                  _cov.Add(cov, Vector::Norm(r), Vector::Norm(rgb));
-                  r = (r*float(s) + rgb)*(1.f/(s+1.f));
+                  _cov.Add(cov, Vector::Norm(_r), Vector::Norm(rad));
+                  _r = (_r*float(s) + rad)*(1.f/(s+1.f));
                }
 
-               auto c = Vector(std::fabs(_cov.matrix[5]),
-                          std::fabs(_cov.matrix[8]),
-                          std::fabs(_cov.matrix[9]));
+               // What do you want to see? [Un]comment some of those line to
+               // output a different part of aspect of frequency analysis.
+               Vector c;
+
+               //  1) The angular part of the covariance
+               //c = Vector(std::fabs(_cov.matrix[5]),
+               //           std::fabs(_cov.matrix[8]),
+               //           std::fabs(_cov.matrix[9]));
+
+               //  2) The spatial part of the covariance
+               //c = Vector(std::fabs(_cov.matrix[0]),
+               //           std::fabs(_cov.matrix[1]),
+               //           std::fabs(_cov.matrix[2]));
+               //c = Vector(std::fabs(cr), 0.0, std::fabs(sr));
+
+               //  3) Predicted sampling density. This is what Belcour et al.
+               //  [2013] used to generate the image space adaptive sampling.
+               float den;
+               den = _cov.matrix[0]*_cov.matrix[2]-pow(_cov.matrix[1], 2);
+               den = sqrt(fmax(den, 0.0));
+               c = Vector(den, den, den);
+
+               //  4) Radiance
+               //c = _r;
+
                img[i] = img[i] + c*.25;
             }
          }

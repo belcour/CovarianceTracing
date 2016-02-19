@@ -10,7 +10,7 @@ std::uniform_real_distribution<double> dist(0,1);
 // Local includes
 #include "common.hpp"
 
-Material phong(Vector(), Vector(), Vector(1,1,1)*.999, 1000.);
+Material phong(Vector(), Vector(), Vector(1,1,1)*.999, 1.E3);
 
 Sphere spheres[] = {
    Sphere(Vector( 1e5+1,40.8,81.6),  1e5,  Vector(),Vector(.75,.25,.25)),//Left
@@ -134,20 +134,38 @@ int main(int argc, char** argv){
    Vector ncy  = cy; ncy.Normalize();
    Vector* img = new Vector[w*h];
 
-   const double sigma = .5f;
+   const double sigma = .25f;
    const double fact  = 1.f / (sqrt(2.*M_PI)*sigma);
 
    _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
 
    // Loop over the rows and columns of the image and evaluate radiance and
    // covariance per pixel using Monte-Carlo.
-   //*
-   int x=200;
-   int y=210;
-   /*/
-   int x=164;
-   int y=218;
-   //*/
+   const int pixel = 0;
+   int x, y;
+   switch(pixel) {
+      case 0: // Bounce on the left sphere to the right wall
+         x=209;
+         y=176;
+         break;
+      case 1: // Bounce on the left sphere to the back wall (upper left)
+         x=164;
+         y=218;
+         break;
+      case 2: // Bounce on the left sphere to the back wall (upper left)
+         x=171;
+         y=218;
+         break;
+      case 3: // Bounce on the left sphere to the ground, very thin filter
+         x = 179;
+         y = 103;
+         break;
+      case 4: // Bounce on the left sphere to the middle of the ground
+         x = 174;
+         y = 125;
+         break;
+   }
+
    std::vector<PosFilter> _filter_elems;
 
    // Sub pixel sampling
@@ -224,21 +242,26 @@ int main(int argc, char** argv){
                const double du  = Vector::Dot(dx, surfCov.second.x);
                const double dv  = Vector::Dot(dx, surfCov.second.y);
                const double dt  = Vector::Dot(dx, surfCov.second.z);
+               /*
                double det = surfCov.second.matrix[0]*surfCov.second.matrix[2]
                           - pow(surfCov.second.matrix[1], 2);
-               double bf  = du*du*surfCov.second.matrix[2]
-                          + dv*dv*surfCov.second.matrix[0]
-                          - 2*du*dv*surfCov.second.matrix[1];
-
+               */
+               double bf  = du*du*surfCov.second.matrix[0]
+                          + dv*dv*surfCov.second.matrix[2]
+                          + 2*du*dv*surfCov.second.matrix[1];
+               bf /= pow(M_PI, 2);
+               /*
                det = 1.0;
                bf  = du*du+dv*dv;
-               _r = _r + 0.25 * exp(-10.0*dt*dt) * exp(- 0.5* bf/det) * Vector(0,0,1);
+               */
+               _r = _r + 0.25 * exp(-10.0*dt*dt) * exp(- 0.5* bf) * Vector(0,0,1);
             }
          }
 
          img[i] = _r;
       }
    }
+   std::cout << std::endl;
    int index = (h-y-1)*w+x;
    img[index] = Vector(0,1,0);
 

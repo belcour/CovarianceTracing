@@ -24,14 +24,13 @@ struct Vector {
       return r;
    }
    Vector Normalize() {
-      Vector r;
       double norm = sqrt(Dot(*this, *this));
-      r.x = x/norm;
-      r.y = y/norm;
-      r.z = z/norm;
-      return r;
+      x /= norm;
+      y /= norm;
+      z /= norm;
+      return *this;
    }
-   static float Norm(const Vector& a) {
+   static double Norm(const Vector& a) {
        return sqrt(Vector::Dot(a, a));
    }
    bool IsNull() const {
@@ -80,9 +79,9 @@ struct Vector {
    }
    friend Vector operator-(const Vector& w) {
       Vector v;
-      v.x = w.x;
-      v.y = w.y;
-      v.z = w.z;
+      v.x = -w.x;
+      v.y = -w.y;
+      v.z = -w.z;
       return v;
    }
    friend std::ostream& operator<<(std::ostream& out, const Vector& w) {
@@ -104,17 +103,101 @@ struct Ray {
    Ray(const Vector& o, const Vector& d) : o(o), d(d) {}
 };
 
+struct Camera {
+   Vector o, d;
+   Vector cx, cy;
+   double  fx, fy;
+
+   Camera(const Vector& o, const Vector& d) : o(o), d(d), fx(1.0), fy(1.0) {
+      Vector::Frame(d, cx, cy);
+   }
+
+   Vector PixelToDirection(const Vector uv) const {
+      return (d + (uv.x-.5)*fx*cx + (uv.y-0.5)*fy*cy).Normalize();
+   }
+
+   // TODO: Finish implementation
+   Vector DirectionToPixel(const Vector dir) const {
+      double u,v;
+      u = Vector::Dot(dir, cx);
+      v = Vector::Dot(dir, cy);
+   }
+};
+
+struct Material {
+   // Diffuse and specular values
+   Vector ke, kd, ks;
+   double exponent;
+
+   // Constructors
+   Material(const Vector& ke, const Vector& kd, const Vector& ks, double exponent)
+      : ke(ke), kd(kd), ks(ks), exponent(exponent) {}
+
+   Material(const Vector& ke, const Vector& kd)
+      : ke(ke), kd(kd), ks(), exponent(0.f) {}
+
+   // Evaluate
+   Vector Emission() const {
+      return ke;
+   }
+   inline double PhongLobe(const Vector& wr, const Vector& wo) const {
+      const auto dot = Vector::Dot(wr, wo);
+      const auto f   = ((exponent+1.f)/(2.f*M_PI))*pow(dot, exponent);
+      return f;
+   }
+   Vector Reflectance(const Vector& wi, const Vector& wo, const Vector& n) const {
+      if(Vector::Dot(wi, n) <= 0.0f || Vector::Dot(wo, n) <= 0.0f) {
+         return Vector();
+      }
+      const auto wr = 2.f*Vector::Dot(wi, n)*n - wi;
+      const auto fs = PhongLobe(wr, wo);
+      const auto fd = 1.f / (2.f * M_PI);
+      return fd*kd + fs*ks;
+   }
+
+   // Sample phong
+   Vector Sample(const Vector& wi, const Vector& n,
+                 const Vector& e, double& pdf) const {
+      Vector u, v;
+      if(Vector::Dot(wi, n) <= 0.0) {
+         pdf = 0.0f;
+         return Vector();
+      }
+
+      // TODO here, should scale by the selection ratio
+      if(e.z * Vector::Norm(kd+ks) <= Vector::Norm(ks)) {
+         const auto cosT = pow(e.x, 1.f/(exponent+1.f));
+         const auto sinT = sqrt(1.f - cosT*cosT);
+         const auto phi  = 2*M_PI*e.y;
+         const auto wr   = 2.f*Vector::Dot(wi, n)*n - wi;
+         Vector::Frame(wr, u, v);
+         const auto wo = cosT*wr + sinT*(cos(phi)*u + sin(phi)*v);
+         pdf = PhongLobe(wr, wo);
+         return wo;
+      } else {
+         Vector::Frame(n, u, v);
+         const auto cosT = e.x;
+         const auto sinT = sqrt(1.f - cosT*cosT);
+         const auto phi  = 2*M_PI*e.y;
+         const auto wo = cosT*n + sinT*(cos(phi)*u + sin(phi)*v);
+         pdf = 1.f / (2.f * M_PI);
+         return wo;
+      }
+   }
+};
+
 struct Sphere {
    // Geometric information for the sphere
    Vector c;
    double r;
 
    // Emission and reflectance color
-   Vector ke;
-   Vector kd;
+   Material mat;
 
-   Sphere(const Vector& c, double r, const Vector ke, const Vector& kd) 
-      : c(c), r(r), ke(ke), kd(kd) {}
+   Sphere(const Vector& c, double r, const Material& mat)
+      : c(c), r(r), mat(mat) {}
+   Sphere(const Vector& c, double r, const Vector& ke, const Vector& kd)
+      : c(c), r(r), mat(ke, kd) {}
 
    // returns distance, -1 if nohit
    double Intersect(const Ray &ray) const {
@@ -137,7 +220,7 @@ int SaveEXR(const Vector* img, int w, int h, const std::string& filename) {
    InitEXRImage(&image);
    image.num_channels  = 3;
    const char* names[] = {"B", "G", "R"};
-   
+
     std::vector<float> images[3];
     images[0].resize(w * h);
     images[1].resize(w * h);
@@ -159,7 +242,7 @@ int SaveEXR(const Vector* img, int w, int h, const std::string& filename) {
     image.width = w;
     image.height = h;
     image.compression = TINYEXR_COMPRESSIONTYPE_ZIP;
-    
+
     image.pixel_types = (int *)malloc(sizeof(int) * image.num_channels);
     image.requested_pixel_types = (int *)malloc(sizeof(int) * image.num_channels);
     for (int i = 0; i < image.num_channels; i++) {

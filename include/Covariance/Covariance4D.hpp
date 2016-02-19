@@ -363,6 +363,10 @@ namespace Covariance {
                     0.0f, 0.0f,  suu,
                     0.0f, 0.0f, 0.0f,  svv};
       }
+      Covariance4D(std::array<float, 10> matrix, const Vector& z) :
+         matrix(matrix), z(z) {
+         Vector::Frame(z, x, y);
+      }
       Covariance4D(std::array<float, 10> matrix,
                    const Vector& x,
                    const Vector& y,

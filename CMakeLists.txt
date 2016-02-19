@@ -21,5 +21,7 @@ target_compile_features(TestCovariance4D PRIVATE cxx_range_for)
 enable_testing()
 add_test(TestCovariance4D TestCovariance4D)
 
-add_executable (SmallCov tutorials/path.cpp)
+add_executable (SmallCov tutorials/tutorial1.cpp)
 target_compile_features(SmallCov PRIVATE cxx_range_for)
+add_executable (CovFiltering tutorials/tutorial2.cpp)
+target_compile_features(CovFiltering PRIVATE cxx_range_for)

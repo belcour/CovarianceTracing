@@ -12,7 +12,7 @@ std::uniform_real_distribution<double> dist(0,1);
 
 Material phong(Vector(), Vector(), Vector(1,1,1)*.999, 1.E3);
 
-Sphere spheres[] = {
+std::vector<Sphere> spheres = {
    Sphere(Vector( 1e5+1,40.8,81.6),  1e5,  Vector(),Vector(.75,.25,.25)),//Left
    Sphere(Vector(-1e5+99,40.8,81.6), 1e5,  Vector(),Vector(.25,.25,.75)),//Rght
    Sphere(Vector(50,40.8, 1e5),      1e5,  Vector(),Vector(.75,.75,.75)),//Back
@@ -24,19 +24,12 @@ Sphere spheres[] = {
    Sphere(Vector(50,681.6-.27,81.6), 600,  Vector(12,12,12),  Vector()) //Lite
 };
 
-
-inline bool intersect(const Ray &r, double &t, int &id){
-   double n=sizeof(spheres)/sizeof(Sphere), d, inf=t=1e20;
-   for(int i=int(n);i--;) if((d=spheres[i].Intersect(r))&&d<t){t=d;id=i;}
-   return t<inf;
-}
-
 using PosFilter = std::pair<Vector, Vector>;
 
 PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
-   double t;                               // distance to intersection
-   int id=0;                               // id of intersected object
-   if (!intersect(r, t, id)) return PosFilter(Vector(), Vector()); // if miss, return black
+   double t;                               // distance to Intersection
+   int id=0;                               // id of Intersected object
+   if (!Intersect(spheres, r, t, id)) return PosFilter(Vector(), Vector()); // if miss, return black
    const Sphere&   obj = spheres[id];      // the hit object
    const Material& mat = obj.mat;          // Its material
    Vector x  = r.o+r.d*t,
@@ -72,52 +65,6 @@ PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
       return PosFilter(res.first, (1.f/pdf) * f.Multiply(res.second));
    }
 }
-
-// Covariance Tracing includes
-#include <Covariance/Covariance4D.hpp>
-using namespace Covariance;
-using Cov    = Covariance4D<Vector>;
-using PosCov = std::pair<Vector, Cov>;
-
-PosCov CovarianceFilter(const Ray &r, const Cov& cov, int depth, int maxdepth=2) {
-   double t;                               // distance to intersection
-   int id=0;                               // id of intersected object
-   if (!intersect(r, t, id)) return PosCov(Vector(), Cov()); // if miss, return black
-   const Sphere&   obj = spheres[id];      // the hit object
-   const Material& mat = obj.mat;          // Its material
-   Vector x  = r.o+r.d*t,
-          n  = (x-obj.c).Normalize(),
-          nl = Vector::Dot(n,r.d) < 0 ? n:n*-1;
-   const double k = 1.f/spheres[id].r;
-
-   // Update the covariance with travel and project it onto the tangent plane
-   // of the hit object.
-   Cov cov2 = cov;
-   cov2.Travel(t);
-   cov2.Projection(n);
-
-   // if the max depth is reached
-   if(depth >= maxdepth) {
-      cov2.matrix[1] = - cov2.matrix[1];
-      return PosCov(x, cov2);
-   } else {
-
-      // Sample a new direction
-      auto wi = -r.d;
-      auto wr = 2*Vector::Dot(wi, nl)*nl - wi;
-      auto r2 = Ray(x, wr);
-
-      cov2.Curvature(k, k);
-      cov2.Cosine(1.0f);
-      cov2.Symmetry();
-      const double rho = mat.exponent / (4*M_PI*M_PI);
-      cov2.Reflection(rho, rho);
-      cov2.Curvature(-k, -k);
-      cov2.InverseProjection(wr);
-      return CovarianceFilter(r2, cov2, depth+1, maxdepth);
-   }
-}
-
 
 #include <xmmintrin.h>
 
@@ -203,8 +150,8 @@ int main(int argc, char** argv){
    const auto t = (cx*((x+0.5)/double(w) - .5) + cy*((y+0.5)/double(h) - .5) + cam.d).Normalize();
    const auto u = (ncx - Vector::Dot(t, ncx)*t).Normalize();
    const auto v = (ncy - Vector::Dot(t, ncy)*t).Normalize();
-   const auto pixelCov = Cov({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 1.0E5, 0.0, 0.0, 0.0, 1.0E5 }, t);
-   auto surfCov  = CovarianceFilter(Ray(cam.o, t), pixelCov, 0, 1);
+   const auto pixelCov = Cov4D({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 1.0E5, 0.0, 0.0, 0.0, 1.0E5 }, t);
+   auto surfCov  = CovarianceFilter(spheres, Ray(cam.o, t), pixelCov, 0, 1);
    std::cout << "Hit point for covariance: " << surfCov.second.matrix[0]
              << ", " << surfCov.second.matrix[1]
              << ", " << surfCov.second.matrix[2] << std::endl;
@@ -228,7 +175,7 @@ int main(int argc, char** argv){
 
                Ray ray(cam.o, d);
                double t; int id;
-               if(!intersect(ray, t, id)){ continue; }
+               if(!Intersect(spheres, ray, t, id)){ continue; }
                Vector hitp = ray.o + t*ray.d;
 
                for(auto& elem : _filter_elems) {

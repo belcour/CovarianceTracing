@@ -19,7 +19,7 @@ using RadCov = std::pair<Vector, Cov>;
 
 Material phong(Vector(), Vector(0,0,0), Vector(1,1,1)*.999, 100.0);
 
-Sphere spheres[] = {
+std::vector<Sphere> spheres = {
    Sphere(Vector( 1e5+1,40.8,81.6),  1e5,  Vector(),Vector(.75,.25,.25)),//Left
    Sphere(Vector(-1e5+99,40.8,81.6), 1e5,  Vector(),Vector(.25,.25,.75)),//Rght
    Sphere(Vector(50,40.8, 1e5),      1e5,  Vector(),Vector(.75,.75,.75)),//Back
@@ -31,17 +31,10 @@ Sphere spheres[] = {
    Sphere(Vector(50,681.6-.27,81.6), 600,  Vector(12,12,12),  Vector()) //Lite
 };
 
-
-inline bool intersect(const Ray &r, double &t, int &id){
-   double n=sizeof(spheres)/sizeof(Sphere), d, inf=t=1e20;
-   for(int i=int(n);i--;) if((d=spheres[i].Intersect(r))&&d<t){t=d;id=i;}
-   return t<inf;
-}
-
-RadCov radiance(const Ray &r, int depth){
+RadCov radiance(const Ray &r, int depth, int maxdepth=1){
    double t;                               // distance to intersection
    int id=0;                               // id of intersected object
-   if (!intersect(r, t, id)) return RadCov(Vector(), Cov()); // if miss, return black
+   if (!Intersect(spheres, r, t, id)) return RadCov(Vector(), Cov()); // if miss, return black
    const Sphere&   obj = spheres[id];      // the hit object
    const Material& mat = obj.mat;          // Its material
    
@@ -69,7 +62,7 @@ RadCov radiance(const Ray &r, int depth){
    // Terminate the recursion after a finite number of call. Since this
    // implementation is recursive and passing covariance objects, the
    // number of max bounces is deterministic.
-   } else if(depth>1) {
+   } else if(depth > maxdepth) {
       Cov cov({ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, u, v, w);
       cov.InverseProjection(-r.d);
       return RadCov(Vector(), cov) ;

@@ -5,6 +5,11 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <random>
+#include <utility>
+
+std::default_random_engine _gen;
+std::uniform_real_distribution<double> _dist(0,1);
 
 double Clamp(double x) {
    return x<0 ? 0 : x>1 ? 1 : x;
@@ -210,6 +215,105 @@ struct Sphere {
    }
 };
 
+/* 'Intersect' routine return the intersection of a ray with a vector of spheres.
+ * this method return true if a sphere is intersected and false if nothing is
+ * hit. If a hit is found, 't' contain the distance to the hit point and 'id' the
+ * index of the hit sphere.
+ */
+inline bool Intersect(const std::vector<Sphere>& spheres, const Ray &r, double &t, int &id){
+   double d, inf=t=1e20;
+   for(int i=spheres.size(); i--;) if((d=spheres[i].Intersect(r)) && d<t) { t=d; id=i; }
+   return t<inf;
+}
+
+/* 'Radiance' evaluate the RGB throughput using path tracing with no explicit
+ * connection to the light. This is a very crude way to do it, but it is the simplest
+ * to rapidly prototype in practice. This code assumes that light sources do not 
+ * scatter light.
+ */
+Vector Radiance(const std::vector<Sphere>& spheres, const Ray &r, int depth, int maxdepth=1){
+   double t;                               // distance to intersection
+   int id=0;                               // id of intersected object
+   if (!Intersect(spheres, r, t, id)) return Vector(); // if miss, return black
+   const Sphere&   obj = spheres[id];      // the hit object
+   const Material& mat = obj.mat;          // Its material
+   
+   Vector x  = r.o+r.d*t;
+   Vector n  = (x-obj.c).Normalize();
+   Vector nl = (Vector::Dot(n, r.d) < 0.f) ? n : (-1.f)*n;
+   
+   /* Local Frame at the surface of the object */
+   Vector w = nl;
+   Vector u = Vector::Cross((fabs(w.x) > .1 ? Vector(0,1,0) : Vector(1,0,0)), w).Normalize();
+   Vector v = Vector::Cross(w, u);
+
+   // If the object is a source return radiance
+   if(!mat.ke.IsNull()) {
+      return mat.ke;
+
+   // Terminate the recursion after a finite number of call
+   } else if(depth > maxdepth) {
+      return Vector();
+
+   // Ray shooting
+   } else {
+      double pdf = 0.f;
+      const auto e  = Vector(_dist(_gen), _dist(_gen), _dist(_gen));
+      const auto wo = -r.d;
+      const auto wi = mat.Sample(wo, nl, e, pdf);
+      if(Vector::Dot(wo, nl) <= 0.f || pdf <= 0.f) {
+      	 return Vector();
+      }
+      auto f = Vector::Dot(wi, nl)*mat.Reflectance(wi, wo, nl);
+      const Vector rad = Radiance(spheres, Ray(x, wi), depth+1);
+      
+      return (1.f/pdf) * f.Multiply(rad);
+   }
+}
+
+// Covariance Tracing includes
+#include <Covariance/Covariance4D.hpp>
+using Cov4D  = Covariance::Covariance4D<Vector>;
+using PosCov = std::pair<Vector, Cov4D>;
+
+PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r, const Cov4D& cov, int depth, int maxdepth=2) {
+   double t;                               // distance to Intersection
+   int id=0;                               // id of Intersected object
+   if (!Intersect(spheres, r, t, id)) return PosCov(Vector(), Cov4D()); // if miss, return black
+   const Sphere&   obj = spheres[id];      // the hit object
+   const Material& mat = obj.mat;          // Its material
+   Vector x  = r.o+r.d*t,
+          n  = (x-obj.c).Normalize(),
+          nl = Vector::Dot(n,r.d) < 0 ? n:n*-1;
+   const double k = 1.f/spheres[id].r;
+
+   // Update the covariance with travel and project it onto the tangent plane
+   // of the hit object.
+   Cov4D cov2 = cov;
+   cov2.Travel(t);
+   cov2.Projection(n);
+
+   // if the max depth is reached
+   if(depth >= maxdepth) {
+      cov2.matrix[1] = - cov2.matrix[1];
+      return PosCov(x, cov2);
+   } else {
+
+      // Sample a new direction
+      auto wi = -r.d;
+      auto wr = 2*Vector::Dot(wi, nl)*nl - wi;
+      auto r2 = Ray(x, wr);
+
+      cov2.Curvature(k, k);
+      cov2.Cosine(1.0f);
+      cov2.Symmetry();
+      const double rho = mat.exponent / (4*M_PI*M_PI);
+      cov2.Reflection(rho, rho);
+      cov2.Curvature(-k, -k);
+      cov2.InverseProjection(wr);
+      return CovarianceFilter(spheres, r2, cov2, depth+1, maxdepth);
+   }
+}
 
 // TinyEXR includes
 #define TINYEXR_IMPLEMENTATION

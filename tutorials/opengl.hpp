@@ -459,3 +459,16 @@ void MouseClicked(int Button, int State, int x, int y) {
 
    glutPostRedisplay();
 }
+
+void MouseMoved(int x, int y) {
+   double width =  glutGet(GLUT_WINDOW_WIDTH);
+   double height = glutGet(GLUT_WINDOW_HEIGHT);
+   mouse.X0 = mouse.X;
+   mouse.X  = x /(double)width;
+   mouse.Dx = mouse.X0 - mouse.X;
+   mouse.Y0 = mouse.Y;
+   mouse.Y = (height-y)/(double)height;
+   mouse.Dy = mouse.Y0 - mouse.Y;
+
+   glutPostRedisplay();
+}

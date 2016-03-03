@@ -58,6 +58,18 @@ Vector  cy  = Vector::Cross(cx, cam.d).Normalize()*fov;
 Vector ncx  = cx;
 Vector ncy  = cy;
 
+void ExportImage() {
+   Vector* img = new Vector[width*height];
+   for(int i=0; i<width*height; ++i) {
+      img[i].x = background[i] + pixels[i];
+      img[i].y = background[i];
+      img[i].z = background[i];
+   }
+
+   int ret = SaveEXR(img, width, height, "output.exr");
+   if(ret != 0) { std::cerr << "Unable to export image" << std::endl; }
+}
+
 void KeyboardKeys(unsigned char key, int x, int y) {
    if(key == 'b') {
       generateBackground = !generateBackground;
@@ -69,6 +81,8 @@ void KeyboardKeys(unsigned char key, int x, int y) {
       Material phong(Vector(), Vector(), Vector(1,1,1)*.999, fmax(spheres[0].mat.exponent / 10, 1.0));
       spheres[0].mat = phong;
       nPasses = 0;
+   } else if(key == 'p') {
+      ExportImage();
    }
    glutPostRedisplay();
 }
@@ -140,8 +154,8 @@ void CovarianceTexture() {
                     - pow(surfCov.second.matrix[1], 2);
          */
          double bf  = du*du*surfCov.second.matrix[0]
-            + dv*dv*surfCov.second.matrix[2]
-            + 2*du*dv*surfCov.second.matrix[1];
+                    + dv*dv*surfCov.second.matrix[2]
+                    + 2*du*dv*surfCov.second.matrix[1];
          bf /= pow(M_PI, 2);
          /*
          det = 1.0;

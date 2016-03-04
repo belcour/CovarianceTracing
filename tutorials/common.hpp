@@ -277,10 +277,12 @@ using Cov4D  = Covariance::Covariance4D<Vector, double>;
 using PosCov = std::pair<Vector, Cov4D>;
 
 std::ostream& operator<<(std::ostream& out, const Cov4D& cov) {
-   out << cov.matrix[0] << "\t" << cov.matrix[1] << "\t" << cov.matrix[3] << "\t" << cov.matrix[6] << std::endl;
-   out << cov.matrix[1] << "\t" << cov.matrix[2] << "\t" << cov.matrix[4] << "\t" << cov.matrix[7] << std::endl;
-   out << cov.matrix[3] << "\t" << cov.matrix[4] << "\t" << cov.matrix[5] << "\t" << cov.matrix[8] << std::endl;
-   out << cov.matrix[6] << "\t" << cov.matrix[7] << "\t" << cov.matrix[8] << "\t" << cov.matrix[9] << std::endl;
+   out << std::scientific << std::showpos;
+   out.precision(3);
+   out << "[" << cov.matrix[0] << ",\t" << cov.matrix[1] << ",\t" << cov.matrix[3] << ",\t" << cov.matrix[6] << ";" << std::endl;
+   out << " " << cov.matrix[1] << ",\t" << cov.matrix[2] << ",\t" << cov.matrix[4] << ",\t" << cov.matrix[7] << ";" << std::endl;
+   out << " " << cov.matrix[3] << ",\t" << cov.matrix[4] << ",\t" << cov.matrix[5] << ",\t" << cov.matrix[8] << ";" << std::endl;
+   out << " " << cov.matrix[6] << ",\t" << cov.matrix[7] << ",\t" << cov.matrix[8] << ",\t" << cov.matrix[9] << "]";
    return out;
 }
 

@@ -64,11 +64,15 @@ struct Vector {
 using Cov = Covariance4D<Vector, float>;
 
 bool IsApprox(const Cov& A, const Cov& B, float Eps=1.0E-5) {
-   bool isApprox = true;
+   bool IsApprox = true;
    for(int i=0; i<10; ++i) {
-      isApprox &= std::abs(A.matrix[i] - B.matrix[i]) < Eps;
+      IsApprox &= std::abs(A.matrix[i] - B.matrix[i]) < Eps;
    }
-   return isApprox;
+   return IsApprox;
+}
+
+bool IsApprox(float a, float b, float Eps=1.0E-5) {
+   return std::abs(a - b) < Eps;
 }
 
 std::ostream& operator<<(std::ostream& out, const Cov& A) {
@@ -340,6 +344,66 @@ int TestOrientation() {
    return nb_fails;
 }
 
+int TestVolume() {
+   int nb_fails = 0;
+
+   std::array<float, 10> matrix;
+   Vector x, y, z;
+   float t, k, vol;
+   Cov A;
+
+   x = Vector( 1, 0, 0);
+   y = Vector( 0, 1, 0);
+   z = Vector( 0, 0, 1);
+
+   matrix = {1.0,
+             0.0, 1.0,
+             0.0, 0.0, 1.0,
+             0.0, 0.0, 0.0, 1.0};
+   t = 1.0/3.0;
+   k = sqrt(2.0);
+   A = Cov(matrix, x, y, z);
+
+   std::cerr.precision(10);
+   A.Travel(t);
+   vol = A.Volume();
+   if(!IsApprox(vol, 1.0f)) {
+      std::cerr << "Error: the travel operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
+      ++nb_fails;
+   }
+
+   A.Curvature(k, k);
+   vol = A.Volume();
+   if(!IsApprox(vol, 1.0f)) {
+      std::cerr << "Error: the curvature operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
+      ++nb_fails;
+   }
+
+   A.Symmetry();
+   vol = A.Volume();
+   if(!IsApprox(vol, 1.0f)) {
+      std::cerr << "Error: the symmetry operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
+      ++nb_fails;
+   }
+
+   A.Curvature(-k, -k);
+   vol = A.Volume();
+   if(!IsApprox(vol, 1.0f)) {
+      std::cerr << "Error: the inv. curvature operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
+      ++nb_fails;
+   }
+
+   A.Rotate(0.2*M_PI);
+   vol = A.Volume();
+   if(!IsApprox(vol, 1.0f)) {
+      std::cerr << "Error: the rotation operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
+      ++nb_fails;
+   }
+
+   return nb_fails;
+}
+
+
 int main(int argc, char** argv) {
    int nb_fails = 0;
    std::cout << std::fixed << std::showpos << std::setprecision(2);
@@ -349,6 +413,7 @@ int main(int argc, char** argv) {
    nb_fails += TestProjection();
    nb_fails += TestReflection();
    nb_fails += TestOrientation();
+   nb_fails += TestVolume();
 
    if(nb_fails > 0) {
       return EXIT_FAILURE;

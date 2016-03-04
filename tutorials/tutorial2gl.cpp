@@ -143,14 +143,18 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
    cov2.Travel(t);
    out << "After travel of " << t << " meters" << std::endl;
    out << cov2 << std::endl;
+   out << "Volume = " << cov2.Volume() << std::endl;
+   out << std::endl;
 
    cov2.Projection(n);
    out << "After projection" << std::endl;
    out << cov2 << std::endl;
+   out << "Volume = " << cov2.Volume() << std::endl;
+   out << std::endl;
 
    // if the max depth is reached
    if(depth >= maxdepth) {
-      cov2.matrix[1] = - cov2.matrix[1];
+      //cov2.matrix[1] = - cov2.matrix[1];
       return PosCov(x, cov2);
    } else {
       // Sample a new direction
@@ -161,6 +165,8 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
       cov2.Curvature(k, k);
       out << "After curvature" << std::endl;
       out << cov2 << std::endl;
+      out << "Volume = " << cov2.Volume() << std::endl;
+      out << std::endl;
 
       //cov2.Cosine(1.0f);
       //out << "After cosine multiplication" << std::endl;
@@ -169,17 +175,28 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
       cov2.Symmetry();
       out << "After symmetry" << std::endl;
       out << cov2 << std::endl;
+      out << "Volume = " << cov2.Volume() << std::endl;
+      out << std::endl;
 
       const double rho = mat.exponent / (4*M_PI*M_PI);
       cov2.Reflection(rho, rho);
       out << "After BRDF convolution of sigma=" << rho << std::endl;
       out << cov2 << std::endl;
+      out << "Volume = " << cov2.Volume() << std::endl;
+      out << std::endl;
 
       cov2.Curvature(-k, -k);
       out << "After inverse curvature" << std::endl;
       out << cov2 << std::endl;
+      out << "Volume = " << cov2.Volume() << std::endl;
+      out << std::endl;
 
       cov2.InverseProjection(wr);
+      out << "After inverse projection" << std::endl;
+      out << cov2 << std::endl;
+      out << "Volume = " << cov2.Volume() << std::endl;
+      out << std::endl;
+
       return CovarianceFilter(spheres, r2, cov2, depth+1, maxdepth, out);
    }
 }
@@ -194,6 +211,19 @@ void CovarianceTexture() {
 
    sout = std::stringstream();
    const auto surfCov  = CovarianceFilter(spheres, Ray(cam.o, t), pixelCov, 0, 1, sout);
+   sout << surfCov.second << std::endl;
+   sout << "Volume = " << surfCov.second.Volume() << std::endl;
+   sout << std::endl;
+
+   double sxx = 0, syy = 0, sxy = 0;
+   try {
+      surfCov.second.SpatialFilter(sxx, sxy, syy);
+   } catch (...) {
+      sout << "Error: incorrect spatial filter" << std::endl;
+      sout << surfCov.second << std::endl;
+      return;
+   }
+   //std::cout << "Filter = [" << sxx << ", " << sxy << ", " << syy << "]" << std::endl;
 
    // Loop over the rows and columns of the image and evaluate radiance and
    // covariance per pixel using Monte-Carlo.
@@ -218,19 +248,16 @@ void CovarianceTexture() {
          const double du  = Vector::Dot(dx, surfCov.second.x);
          const double dv  = Vector::Dot(dx, surfCov.second.y);
          const double dt  = Vector::Dot(dx, surfCov.second.z);
-         /*
-         double det = surfCov.second.matrix[0]*surfCov.second.matrix[2]
-                    - pow(surfCov.second.matrix[1], 2);
-         */
+
+/*
          double bf  = du*du*surfCov.second.matrix[0]
                     + dv*dv*surfCov.second.matrix[2]
                     + 2*du*dv*surfCov.second.matrix[1];
          bf /= pow(M_PI, 2);
-         /*
-         det = 1.0;
-         bf  = du*du+dv*dv;
-         */
-         pixels[i] = exp(-10.0*dt*dt) * exp(- 0.5* bf);
+/*/
+         double bf = du*du*sxx + dv*dv*syy + 2*du*dv*sxy;
+//*/
+         pixels[i] = exp(-100.0*dt*dt) * exp(- 0.5* bf);
       }
    }
 }
@@ -353,6 +380,7 @@ void PrintHelp() {
    std::cout << " + 'd' print Covariance Tracing step by step" << std::endl;
    std::cout << " + '+' increase the BRDF exponent for the right sphere" << std::endl;
    std::cout << " + '-' decrease the BRDF exponent for the right sphere" << std::endl;
+   std::cout << std::endl;
 }
 
 int main(int argc, char** argv) {
@@ -366,7 +394,7 @@ int main(int argc, char** argv) {
    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
 
    glutInitWindowSize(width, height);
-   glutCreateWindow("Tutorial number 2");
+   glutCreateWindow("CovarianceTracing tutorial 2");
 
    Init();
 

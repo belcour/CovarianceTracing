@@ -5,6 +5,9 @@
 #include <cmath>
 #include <limits>
 
+// Local includes
+#include "Matrix.hpp"
+
 #define COV_MAX_FLOAT 1.0E+5
 #define COV_MIN_FLOAT 1.0E-10
 
@@ -345,6 +348,63 @@ namespace Covariance {
          for(unsigned short i=0; i<10; ++i) {
             matrix[i] = (L1*matrix[i] + L2*cov.matrix[i]) / L;
          }
+      }
+
+      /////////////////////
+      // Spatial Filters //
+      /////////////////////
+
+      /* Compute the spatial filter in primal space. This resumes to computing
+       * the inverse of the spatial submatrix from the inverse covariance
+       * matrix in frequency space.
+       *
+       * TODO: There is a missing factor here. The predicted filters are way
+       * too big right now.
+       */
+      void SpatialFilter(Float& sxx, Float& sxy, Float& syy) const {
+
+         // Compute the inverse matrix. We need to add an epsilon to the
+         // diagonal in order to ensure that the matrix can be inverted.
+         Float inverse[16];
+         inverse[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
+         inverse[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
+         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
+         inverse[10] = matrix[ 5] + COV_MIN_FLOAT;
+         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
+         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
+         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
+         inverse[15] = matrix[ 9] + COV_MIN_FLOAT;
+
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+
+         // The outgoing filter is the inverse submatrix of this inverse
+         // matrix.
+         Float det = inverse[0]*inverse[5]-inverse[1]*inverse[1];
+         sxx =  inverse[5] / det;
+         syy =  inverse[0] / det;
+         sxy = -inverse[1] / det;
+      }
+
+      /* Compute the volume (in frequency domain) spanned by the matrix.
+       * Note: this volume should always be positive.
+       */
+      Float Volume() const {
+
+         Float fmatrix[16];
+         fmatrix[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         fmatrix[ 1] = matrix[ 1]; fmatrix[ 4] = matrix[ 1];
+         fmatrix[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         fmatrix[ 2] = matrix[ 3]; fmatrix[ 8] = matrix[ 3];
+         fmatrix[ 6] = matrix[ 4]; fmatrix[ 9] = matrix[ 4];
+         fmatrix[10] = matrix[ 5] + COV_MIN_FLOAT;
+         fmatrix[ 3] = matrix[ 6]; fmatrix[12] = matrix[ 6];
+         fmatrix[ 7] = matrix[ 7]; fmatrix[13] = matrix[ 7];
+         fmatrix[11] = matrix[ 8]; fmatrix[14] = matrix[ 8];
+         fmatrix[15] = matrix[ 9] + COV_MIN_FLOAT;
+
+         return Determinant<Float>(fmatrix, 4);
       }
 
       /////////////////////

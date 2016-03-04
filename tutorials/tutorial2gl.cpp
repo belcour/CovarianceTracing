@@ -42,6 +42,8 @@ std::vector<Sphere> spheres = {
 // Texture for the bcg_img + size
 int  width = 512, height = 512;
 bool generateBackground = true;
+bool generateCovariance = true;
+bool generateReference  = false;
 int  nPasses = 0;
 
 ShaderProgram* program;
@@ -76,7 +78,11 @@ void ExportImage() {
 }
 
 void KeyboardKeys(unsigned char key, int x, int y) {
-   if(key == 'b') {
+   if(key == 'c') {
+      generateCovariance = !generateCovariance;
+   } else if(key == 'B') {
+      generateReference = !generateReference;
+   } else if(key == 'b') {
       generateBackground = !generateBackground;
    } else if(key == '+') {
       Material phong(Vector(), Vector(), Vector(1,1,1)*.999, spheres[1].mat.exponent * 10);
@@ -255,6 +261,103 @@ void CovarianceTexture() {
    }
 }
 
+using PosFilter = std::pair<Vector, Vector>;
+
+PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
+   double t;                               // distance to Intersection
+   int id=0;                               // id of Intersected object
+   if (!Intersect(spheres, r, t, id)) return PosFilter(Vector(), Vector()); // if miss, return black
+   const Sphere&   obj = spheres[id];      // the hit object
+   const Material& mat = obj.mat;          // Its material
+   Vector x  = r.o+r.d*t,
+          n  = (x-obj.c).Normalize(),
+          nl = Vector::Dot(n,r.d) < 0 ? n:n*-1;
+
+   /* Local Frame at the surface of the object */
+   Vector w = nl;
+
+   // Once you reach the max depth, return the hit position and the filter's
+   // value using the recursive form.
+   if(depth >= maxdepth) {
+      return PosFilter(x, Vector(1.0f, 1.0f, 1.0f));
+
+   // Main covariance computation. First this code generate a new direction
+   // and query the covariance+radiance in that direction. Then, it computes
+   // the covariance after the reflection/refraction.
+   } else {
+      /* Sampling a new direction + recursive call */
+      double pdf;
+      const auto e   = Vector(dist(gen), dist(gen), dist(gen));
+      const auto wo  = -r.d;
+      const auto wi  = mat.Sample(wo, nl, e, pdf);
+            auto f   = Vector::Dot(wi, nl)*mat.Reflectance(wi, wo, nl);
+      const auto res = indirect_filter(Ray(x, wi), depth+1, maxdepth);
+      return PosFilter(res.first, (1.f/pdf) * f.Multiply(res.second));
+   }
+}
+
+void BruteForceTexture(int samps = 1000) {
+
+   std::vector<PosFilter> _filter_elems;
+
+   // Generate a covariance matrix at the sampling position
+   int x = width*mouse.X, y = height*mouse.Y;
+   const double sigma = .5f;
+
+   // Sub pixel sampling
+   for (int s=0; s<samps; s++){
+
+      // Generate a sub-pixel random position to perform super
+      // sampling.
+      double dx=2*dist(gen);
+      double dy=2*dist(gen);
+
+      // Generate the pixel direction
+      Vector d = cx*((dx + x)/width  - .5) +
+                 cy*((dy + y)/height - .5) + cam.d;
+      d.Normalize();
+
+      // Covariance tracing requires to know the pixel frame in order to
+      // align the orientation of the covariance matrix with respect to
+      // the image plane. (cx, cy, d) is not a proper frame and we need
+      // to correct it.
+      const Vector px = (cx - Vector::Dot(d, cx)*d).Normalize(),
+                   py = (cy - Vector::Dot(d, cy)*d).Normalize();
+      const double scaleX = Vector::Norm(cx) / double(width),
+                   scaleY = Vector::Norm(cy) / double(height);
+
+      // Evaluate the Covariance and Radiance at the pixel location
+      _filter_elems.push_back(indirect_filter(Ray(cam.o, d), 0, 1));
+   }
+
+   // Loop over the rows and columns of the image and evaluate radiance and
+   // covariance per pixel using Monte-Carlo.
+   #pragma omp parallel for schedule(dynamic, 1)
+   for (int y=0; y<height; y++){
+      for (int x=0; x<width; x++) {
+         int i=(width-x-1)*height+y;
+         float _r = 0.0f;
+
+         // Generate the pixel direction
+         Vector d = cx*((0.5 + x)/width  - .5) +
+                    cy*((0.5 + y)/height - .5) + cam.d;
+         d.Normalize();
+
+         Ray ray(cam.o, d);
+         double t; int id;
+         if(!Intersect(spheres, ray, t, id)){ continue; }
+         Vector hitp = ray.o + t*ray.d;
+
+         for(auto& elem : _filter_elems) {
+            const auto& p = elem.first;
+            _r += (10.0f/sigma)* exp(-(.5f/(sigma*sigma))*pow(Vector::Norm(hitp-p), 2));
+         }
+
+         ref_img[i] = _r / float(samps);
+      }
+   }
+}
+
 void Draw() {
 
    if(generateBackground) {
@@ -266,11 +369,25 @@ void Draw() {
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, bcg_img);
    }
 
-   CovarianceTexture();
-   glActiveTexture(GL_TEXTURE1);
-   glBindTexture(GL_TEXTURE_2D, texs_id[1]);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, cov_img);
+   if(generateCovariance) {
+      CovarianceTexture();
+
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, texs_id[1]);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, cov_img);
+   }
+
+   if(generateReference) {
+      BruteForceTexture();
+
+      glActiveTexture(GL_TEXTURE2);
+      glBindTexture(GL_TEXTURE_2D, texs_id[2]);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, ref_img);
+
+      generateReference = false;
+   }
 
    program->use();
 
@@ -279,6 +396,9 @@ void Draw() {
 
    glActiveTexture(GL_TEXTURE1);
    glBindTexture(GL_TEXTURE_2D, texs_id[1]);
+
+   glActiveTexture(GL_TEXTURE2);
+   glBindTexture(GL_TEXTURE_2D, texs_id[2]);
 
    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
    auto uniLocation = program->uniform("pointer");

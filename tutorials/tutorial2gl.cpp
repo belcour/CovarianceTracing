@@ -217,7 +217,7 @@ void CovarianceTexture() {
    const auto v = (ncy - Vector::Dot(t, ncy)*t).Normalize();
    const auto pixelCov = Cov4D({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 1.0E5, 0.0, 0.0, 0.0, 1.0E5 }, t);
 
-   sout = std::stringstream();
+   sout.str("");
    const auto surfCov  = CovarianceFilter(spheres, Ray(cam.o, t), pixelCov, 0, 1, sout);
    sout << surfCov.second << std::endl;
    sout << "Volume = " << surfCov.second.Volume() << std::endl;

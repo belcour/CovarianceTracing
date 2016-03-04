@@ -79,6 +79,7 @@ void ExportImage() {
 
 void KeyboardKeys(unsigned char key, int x, int y) {
    if(key == 'c') {
+      memset(cov_img, 0.0, width*height);
       generateCovariance = !generateCovariance;
    } else if(key == 'B') {
       generateReference = !generateReference;
@@ -475,7 +476,9 @@ void PrintHelp() {
    std::cout << "non-diffuse surfaces. To display the filter, click on one of the two" << std::endl;
    std::cout << "shiny spheres." << std::endl;
    std::cout << std::endl;
-   std::cout << " + 'b' stop/resume rendering the bcg_img image" << std::endl;
+   std::cout << " + 'b' stop/resume rendering the background image" << std::endl;
+   std::cout << " + 'c' stop/resume rendering the covariance filter" << std::endl;
+   std::cout << " + 'B' brute-force indirect pixel filter (SLOW)" << std::endl;
    std::cout << " + 'p' output image to EXR file" << std::endl;
    std::cout << " + 'd' print Covariance Tracing step by step" << std::endl;
    std::cout << " + '+' increase the BRDF exponent for the right sphere" << std::endl;

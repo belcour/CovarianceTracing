@@ -282,7 +282,7 @@ void Init() {
    background = new float[width*height];
 
    // Create the shader programs
-   program = new ShaderProgram();
+   program = new ShaderProgram(false);
    std::string vertShader =
       "void main(void) {"
       "   gl_TexCoord[0] = gl_MultiTexCoord0;"
@@ -340,10 +340,27 @@ void Init() {
    program->disable();
 }
 
+void PrintHelp() {
+   std::cout << "CovarianceTracing tutorial 2" << std::endl;
+   std::cout << "----------------------------" << std::endl;
+   std::cout << std::endl;
+   std::cout << "This tutorial display the indirect pixel filter after one bounce for" << std::endl;
+   std::cout << "non-diffuse surfaces. To display the filter, click on one of the two" << std::endl;
+   std::cout << "shiny spheres." << std::endl;
+   std::cout << std::endl;
+   std::cout << " + 'b' stop/resume rendering the background image" << std::endl;
+   std::cout << " + 'p' output image to EXR file" << std::endl;
+   std::cout << " + 'd' print Covariance Tracing step by step" << std::endl;
+   std::cout << " + '+' increase the BRDF exponent for the right sphere" << std::endl;
+   std::cout << " + '-' decrease the BRDF exponent for the right sphere" << std::endl;
+}
+
 int main(int argc, char** argv) {
    cam.o = cam.o + 140.0*cam.d;
    ncx.Normalize();
    ncy.Normalize();
+
+   PrintHelp();
 
    glutInit(&argc, argv);
    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);

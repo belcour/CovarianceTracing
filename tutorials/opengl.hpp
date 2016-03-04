@@ -33,7 +33,7 @@ class ShaderProgram
 {
    private:
       // static DEBUG flag - if set to false then, errors aside, we'll run completely silent
-      static const bool DEBUG = true;
+      bool DEBUG = true;
 
       // We'll use an enum to differentiate between shaders and shader programs when querying the info log
       enum class ObjectType
@@ -239,7 +239,7 @@ class ShaderProgram
 
    public:
       // Constructor
-      ShaderProgram()
+      ShaderProgram(bool DEBUG_=true) : DEBUG(DEBUG_)
       {
          // We start in a non-initialised state - calling initFromFiles() or initFromStrings() will
          // initialise us.

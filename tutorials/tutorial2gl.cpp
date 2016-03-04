@@ -13,6 +13,8 @@
 #include <random>
 #include <utility>
 #include <string>
+#include <iostream>
+#include <sstream>
 
 std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
@@ -58,6 +60,8 @@ Vector  cy  = Vector::Cross(cx, cam.d).Normalize()*fov;
 Vector ncx  = cx;
 Vector ncy  = cy;
 
+std::stringstream sout;
+
 void ExportImage() {
    Vector* img = new Vector[width*height];
    for(int i=0; i<width*height; ++i) {
@@ -74,15 +78,17 @@ void KeyboardKeys(unsigned char key, int x, int y) {
    if(key == 'b') {
       generateBackground = !generateBackground;
    } else if(key == '+') {
-      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, spheres[0].mat.exponent * 10);
-      spheres[0].mat = phong;
+      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, spheres[1].mat.exponent * 10);
+      spheres[1].mat = phong;
       nPasses = 0;
    } else if(key == '-') {
-      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, fmax(spheres[0].mat.exponent / 10, 1.0));
-      spheres[0].mat = phong;
+      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, fmax(spheres[1].mat.exponent / 10, 1.0));
+      spheres[1].mat = phong;
       nPasses = 0;
    } else if(key == 'p') {
       ExportImage();
+   } else if(key == 'd') {
+      std::cout << sout.str() << std::endl;
    }
    glutPostRedisplay();
 }
@@ -116,6 +122,67 @@ void RadianceTexture() {
    glutPostRedisplay();
 }
 
+PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
+                        const Cov4D& cov, int depth, int maxdepth,
+                        std::stringstream& out) {
+   double t;
+   int id=0;
+   if (!Intersect(spheres, r, t, id)) {
+     return PosCov(Vector(), Cov4D());
+   }
+   const Sphere&   obj = spheres[id];
+   const Material& mat = obj.mat;
+   Vector x  = r.o+r.d*t,
+          n  = (x-obj.c).Normalize(),
+          nl = Vector::Dot(n,r.d) < 0 ? n:n*-1;
+   const double k = 1.f/spheres[id].r;
+
+   // Update the covariance with travel and project it onto the tangent plane
+   // of the hit object.
+   Cov4D cov2 = cov;
+   cov2.Travel(t);
+   out << "After travel of " << t << " meters" << std::endl;
+   out << cov2 << std::endl;
+
+   cov2.Projection(n);
+   out << "After projection" << std::endl;
+   out << cov2 << std::endl;
+
+   // if the max depth is reached
+   if(depth >= maxdepth) {
+      cov2.matrix[1] = - cov2.matrix[1];
+      return PosCov(x, cov2);
+   } else {
+      // Sample a new direction
+      auto wi = -r.d;
+      auto wr = 2*Vector::Dot(wi, nl)*nl - wi;
+      auto r2 = Ray(x, wr);
+
+      cov2.Curvature(k, k);
+      out << "After curvature" << std::endl;
+      out << cov2 << std::endl;
+
+      //cov2.Cosine(1.0f);
+      //out << "After cosine multiplication" << std::endl;
+      //out << cov2 << std::endl;
+
+      cov2.Symmetry();
+      out << "After symmetry" << std::endl;
+      out << cov2 << std::endl;
+
+      const double rho = mat.exponent / (4*M_PI*M_PI);
+      cov2.Reflection(rho, rho);
+      out << "After BRDF convolution of sigma=" << rho << std::endl;
+      out << cov2 << std::endl;
+
+      cov2.Curvature(-k, -k);
+      out << "After inverse curvature" << std::endl;
+      out << cov2 << std::endl;
+
+      cov2.InverseProjection(wr);
+      return CovarianceFilter(spheres, r2, cov2, depth+1, maxdepth, out);
+   }
+}
 
 void CovarianceTexture() {
    // Generate a covariance matrix at the sampling position
@@ -124,7 +191,9 @@ void CovarianceTexture() {
    const auto u = (ncx - Vector::Dot(t, ncx)*t).Normalize();
    const auto v = (ncy - Vector::Dot(t, ncy)*t).Normalize();
    const auto pixelCov = Cov4D({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 1.0E5, 0.0, 0.0, 0.0, 1.0E5 }, t);
-   const auto surfCov  = CovarianceFilter(spheres, Ray(cam.o, t), pixelCov, 0, 1);
+
+   sout = std::stringstream();
+   const auto surfCov  = CovarianceFilter(spheres, Ray(cam.o, t), pixelCov, 0, 1, sout);
 
    // Loop over the rows and columns of the image and evaluate radiance and
    // covariance per pixel using Monte-Carlo.
@@ -136,7 +205,7 @@ void CovarianceTexture() {
 
          // Generate the pixel direction
          Vector d = cx*( ( 0.5 + x)/width - .5) +
-            cy*( ( 0.5 + y)/height - .5) + cam.d;
+                    cy*( ( 0.5 + y)/height - .5) + cam.d;
          d.Normalize();
 
          Ray ray(cam.o, d);

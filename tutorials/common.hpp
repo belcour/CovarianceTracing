@@ -228,7 +228,7 @@ inline bool Intersect(const std::vector<Sphere>& spheres, const Ray &r, double &
 
 /* 'Radiance' evaluate the RGB throughput using path tracing with no explicit
  * connection to the light. This is a very crude way to do it, but it is the simplest
- * to rapidly prototype in practice. This code assumes that light sources do not 
+ * to rapidly prototype in practice. This code assumes that light sources do not
  * scatter light.
  */
 Vector Radiance(const std::vector<Sphere>& spheres, const Ray &r, int depth, int maxdepth=1){
@@ -237,11 +237,11 @@ Vector Radiance(const std::vector<Sphere>& spheres, const Ray &r, int depth, int
    if (!Intersect(spheres, r, t, id)) return Vector(); // if miss, return black
    const Sphere&   obj = spheres[id];      // the hit object
    const Material& mat = obj.mat;          // Its material
-   
+
    Vector x  = r.o+r.d*t;
    Vector n  = (x-obj.c).Normalize();
    Vector nl = (Vector::Dot(n, r.d) < 0.f) ? n : (-1.f)*n;
-   
+
    /* Local Frame at the surface of the object */
    Vector w = nl;
    Vector u = Vector::Cross((fabs(w.x) > .1 ? Vector(0,1,0) : Vector(1,0,0)), w).Normalize();
@@ -266,15 +266,23 @@ Vector Radiance(const std::vector<Sphere>& spheres, const Ray &r, int depth, int
       }
       auto f = Vector::Dot(wi, nl)*mat.Reflectance(wi, wo, nl);
       const Vector rad = Radiance(spheres, Ray(x, wi), depth+1);
-      
+
       return (1.f/pdf) * f.Multiply(rad);
    }
 }
 
 // Covariance Tracing includes
 #include <Covariance/Covariance4D.hpp>
-using Cov4D  = Covariance::Covariance4D<Vector>;
+using Cov4D  = Covariance::Covariance4D<Vector, double>;
 using PosCov = std::pair<Vector, Cov4D>;
+
+std::ostream& operator<<(std::ostream& out, const Cov4D& cov) {
+   out << cov.matrix[0] << "\t" << cov.matrix[1] << "\t" << cov.matrix[3] << "\t" << cov.matrix[6] << std::endl;
+   out << cov.matrix[1] << "\t" << cov.matrix[2] << "\t" << cov.matrix[4] << "\t" << cov.matrix[7] << std::endl;
+   out << cov.matrix[3] << "\t" << cov.matrix[4] << "\t" << cov.matrix[5] << "\t" << cov.matrix[8] << std::endl;
+   out << cov.matrix[6] << "\t" << cov.matrix[7] << "\t" << cov.matrix[8] << "\t" << cov.matrix[9] << std::endl;
+   return out;
+}
 
 PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r, const Cov4D& cov, int depth, int maxdepth=2) {
    double t;                               // distance to Intersection

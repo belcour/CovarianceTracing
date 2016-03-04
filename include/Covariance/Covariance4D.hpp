@@ -6,7 +6,7 @@
 #include <limits>
 
 #define COV_MAX_FLOAT 1.0E+5
-#define COV_MIN_FLOAT 1.0E-5
+#define COV_MIN_FLOAT 1.0E-10
 
 namespace Covariance {
 
@@ -36,10 +36,10 @@ namespace Covariance {
     *      ( 3  4  5  8)
     *      ( 6  7  8  9)
     */
-   template<class Vector>
+   template<class Vector, typename Float>
    struct Covariance4D {
 
-      std::array<float, 10> matrix;
+      std::array<Float, 10> matrix;
       Vector x, y, z;
 
 
@@ -51,7 +51,7 @@ namespace Covariance {
        *
        * 'd' distance of travel along the central ray
        */
-      inline void Travel(float d) {
+      inline void Travel(Float d) {
          ShearAngleSpace(d, d);
       }
 
@@ -60,7 +60,7 @@ namespace Covariance {
        * 'kx' curvature along the X direction
        * 'ky' curvature along the Y direction
        */
-      inline void Curvature(float kx, float ky) {
+      inline void Curvature(Float kx, Float ky) {
          ShearSpaceAngle(kx, ky);
       }
 
@@ -68,11 +68,11 @@ namespace Covariance {
        *
        * 'wz' The incident direction's elevation in the local frame
        */
-      inline void Cosine(float wz) {
-         const float theta = acos(wz);
-         const float dist  = std::abs(0.5*M_PI-theta);
-         const float frequ = 2.0 / M_PI;
-         const float freqv = 1.0 / fmax(dist, 1.0E-10);
+      inline void Cosine(Float wz) {
+         const Float theta = acos(wz);
+         const Float dist  = std::abs(0.5*M_PI-theta);
+         const Float frequ = 2.0 / M_PI;
+         const Float freqv = 1.0 / fmax(dist, 1.0E-10);
          matrix[5] += frequ*frequ;
          matrix[9] += freqv*freqv;
       }
@@ -82,7 +82,7 @@ namespace Covariance {
        * 'suu' the covariance of the BRDF along the X axis.
        * 'svv' the covariance of the BRDF along the Y axis.
        */
-      inline void Reflection(float suu, float svv) {
+      inline void Reflection(Float suu, Float svv) {
          if(suu < COV_MAX_FLOAT && svv < COV_MAX_FLOAT) {
             ProductUV(fmax(suu, COV_MIN_FLOAT), fmax(svv, COV_MIN_FLOAT));
          }
@@ -105,13 +105,13 @@ namespace Covariance {
          const auto cy = Vector::Dot(y, n);
 
          // Rotate the Frame to be aligned with plane.
-         const float alpha = (cx != 0.0) ? atan2(cx, cy) : 0.0;
-         const float c = cos(alpha), s = -sin(alpha);
+         const Float alpha = (cx != 0.0) ? atan2(cx, cy) : 0.0;
+         const Float c = cos(alpha), s = -sin(alpha);
          Rotate(c, s);
 
          // Scale the componnent that project by the cosine of the ray direction
          // and the normal.
-         const float cosine = Vector::Dot(z, n);
+         const Float cosine = Vector::Dot(z, n);
          ScaleY(std::abs(cosine));
 
          // Update direction vectors.
@@ -133,13 +133,13 @@ namespace Covariance {
          const auto cy = Vector::Dot(y, d);
 
          // Rotate the Frame to be aligned with plane.
-         const float alpha = (cx != 0.0) ? atan2(cx, cy) : 0.0;
-         const float c = cos(alpha), s = -sin(alpha);
+         const Float alpha = (cx != 0.0) ? atan2(cx, cy) : 0.0;
+         const Float c = cos(alpha), s = -sin(alpha);
          Rotate(c, s); // Rotate of -alpha
 
          // Scale the componnent that project by the inverse cosine of the ray
          // direction and the normal.
-         const float cosine = Vector::Dot(z, d);
+         const Float cosine = Vector::Dot(z, d);
          if(cosine < 0.0f) {
             ScaleV(-1.0f);
             ScaleU(-1.0f);
@@ -169,28 +169,28 @@ namespace Covariance {
       //   Matrix scaling   //
       ////////////////////////
 
-      inline void ScaleX(float alpha) {
+      inline void ScaleX(Float alpha) {
          matrix[0] *= alpha*alpha;
          matrix[1] *= alpha;
          matrix[3] *= alpha;
          matrix[6] *= alpha;
       }
 
-      inline void ScaleY(float alpha) {
+      inline void ScaleY(Float alpha) {
          matrix[1] *= alpha;
          matrix[2] *= alpha*alpha;
          matrix[4] *= alpha;
          matrix[7] *= alpha;
       }
 
-      inline void ScaleU(float alpha) {
+      inline void ScaleU(Float alpha) {
          matrix[3] *= alpha;
          matrix[4] *= alpha;
          matrix[5] *= alpha*alpha;
          matrix[8] *= alpha;
       }
 
-      inline void ScaleV(float alpha) {
+      inline void ScaleV(Float alpha) {
          matrix[6] *= alpha;
          matrix[7] *= alpha;
          matrix[8] *= alpha;
@@ -205,7 +205,7 @@ namespace Covariance {
       // Shear the Spatial (x,y) domain by the Angular (u,v).
       // \param cx amount of shear along the x direction.
       // \param cy amount of shear along the y direction.
-      inline void ShearSpaceAngle(float cx, float cy) {
+      inline void ShearSpaceAngle(Float cx, Float cy) {
          matrix[0] += (matrix[5]*cx - 2*matrix[3])*cx;
          matrix[1] +=  matrix[8]*cx*cy - (matrix[4]*cy + matrix[6]*cx);
          matrix[2] += (matrix[9]*cy - 2*matrix[7])*cy;
@@ -218,7 +218,7 @@ namespace Covariance {
       // Shear the angular (U, V) domain by the spatial (X, Y) domain.
       // \param cu amount of shear along the U direction.
       // \param cy amount of shear along the V direction.
-      inline void ShearAngleSpace(float cu, float cv) {
+      inline void ShearAngleSpace(Float cu, Float cv) {
          matrix[5] += (matrix[0]*cu - 2*matrix[3])*cu;
          matrix[3] -=  matrix[0]*cu;
          matrix[8] +=  matrix[1]*cu*cv - (matrix[4]*cv + matrix[6]*cu);
@@ -234,29 +234,29 @@ namespace Covariance {
       ////////////////////////
 
       // alpha rotation angle
-      inline void Rotate(float alpha) {
-         const float c = cos(alpha);
-         const float s = sin(alpha);
+      inline void Rotate(Float alpha) {
+         const Float c = cos(alpha);
+         const Float s = sin(alpha);
          Rotate(c, s);
       }
 
       // 'c' the cosine of the rotation angle
       // 's' the sine of the rotation angle
-      inline void Rotate(float c, float s) {
-         const float cs = c*s;
-         const float c2 = c*c;
-         const float s2 = s*s;
+      inline void Rotate(Float c, Float s) {
+         const Float cs = c*s;
+         const Float c2 = c*c;
+         const Float s2 = s*s;
 
-         const float cov_xx = matrix[0];
-         const float cov_xy = matrix[1];
-         const float cov_yy = matrix[2];
-         const float cov_xu = matrix[3];
-         const float cov_yu = matrix[4];
-         const float cov_uu = matrix[5];
-         const float cov_xv = matrix[6];
-         const float cov_yv = matrix[7];
-         const float cov_uv = matrix[8];
-         const float cov_vv = matrix[9];
+         const Float cov_xx = matrix[0];
+         const Float cov_xy = matrix[1];
+         const Float cov_yy = matrix[2];
+         const Float cov_xu = matrix[3];
+         const Float cov_yu = matrix[4];
+         const Float cov_uu = matrix[5];
+         const Float cov_xv = matrix[6];
+         const Float cov_yv = matrix[7];
+         const Float cov_uv = matrix[8];
+         const Float cov_vv = matrix[9];
 
          // Rotation of the space
          matrix[0] = c2 * cov_xx + 2*cs * cov_xy + s2 * cov_yy;
@@ -285,29 +285,29 @@ namespace Covariance {
       //
       // 'su' is the sigma u of the inverse angular signal's covariance matrix.
       // 'sv' the sigma v of the inverse angular signal's covariance matrix.
-      inline void ProductUV(float su, float sv) {
+      inline void ProductUV(Float su, Float sv) {
 
          if(su == sv == 0.0) {
             return;
          }
 
-         const float cov_xx = matrix[0];
-         const float cov_xy = matrix[1];
-         const float cov_yy = matrix[2];
-         const float cov_xu = matrix[3];
-         const float cov_yu = matrix[4];
-         const float cov_uu = matrix[5];
-         const float cov_xv = matrix[6];
-         const float cov_yv = matrix[7];
-         const float cov_uv = matrix[8];
-         const float cov_vv = matrix[9];
+         const Float cov_xx = matrix[0];
+         const Float cov_xy = matrix[1];
+         const Float cov_yy = matrix[2];
+         const Float cov_xu = matrix[3];
+         const Float cov_yu = matrix[4];
+         const Float cov_uu = matrix[5];
+         const Float cov_xv = matrix[6];
+         const Float cov_yv = matrix[7];
+         const Float cov_uv = matrix[8];
+         const Float cov_vv = matrix[9];
 
          // The following is an application of the Woodbury matrix identity for
          // a rank 2 C matrix. See:
          //         http://en.wikipedia.org/wiki/Woodbury_matrix_identity
-         const float sig_u = cov_uu+su, sig_v = cov_vv+sv;
-         const float og = (sig_u*sig_v - cov_uv*cov_uv);
-         const float  g = 1.0f / og;
+         const Float sig_u = cov_uu+su, sig_v = cov_vv+sv;
+         const Float og = (sig_u*sig_v - cov_uv*cov_uv);
+         const Float  g = 1.0f / og;
 
          matrix[0] -=  g*(cov_xu*(sig_v*cov_xu-cov_uv*cov_xv) +
                           cov_xv*(sig_u*cov_xv-cov_uv*cov_xu));
@@ -338,8 +338,8 @@ namespace Covariance {
       // Add covariance together //
       /////////////////////////////
 
-      void Add(const Covariance4D& cov, float L1=1.0f, float L2=1.0f) {
-         const float L = L1+L2;
+      void Add(const Covariance4D& cov, Float L1=1.0f, Float L2=1.0f) {
+         const Float L = L1+L2;
          if(L <= 0.0f) return;
 
          for(unsigned short i=0; i<10; ++i) {
@@ -357,17 +357,17 @@ namespace Covariance {
                     0.0f, 0.0f, 0.0f,
                     0.0f, 0.0f, 0.0f, 0.0f};
       }
-      Covariance4D(float sxx, float syy, float suu, float svv) {
+      Covariance4D(Float sxx, Float syy, Float suu, Float svv) {
          matrix = {  sxx,
                     0.0f,  syy,
                     0.0f, 0.0f,  suu,
                     0.0f, 0.0f, 0.0f,  svv};
       }
-      Covariance4D(std::array<float, 10> matrix, const Vector& z) :
+      Covariance4D(std::array<Float, 10> matrix, const Vector& z) :
          matrix(matrix), z(z) {
          Vector::Frame(z, x, y);
       }
-      Covariance4D(std::array<float, 10> matrix,
+      Covariance4D(std::array<Float, 10> matrix,
                    const Vector& x,
                    const Vector& y,
                    const Vector& z) :

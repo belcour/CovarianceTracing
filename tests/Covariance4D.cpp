@@ -5,7 +5,6 @@
 
 // Covariance includes
 #include <Covariance/Covariance4D.hpp>
-
 using namespace Covariance;
 
 struct Vector {
@@ -62,7 +61,9 @@ struct Vector {
    }
 };
 
-bool IsApprox(const Covariance4D<Vector>& A, const Covariance4D<Vector>& B, float Eps=1.0E-5) {
+using Cov = Covariance4D<Vector, float>;
+
+bool IsApprox(const Cov& A, const Cov& B, float Eps=1.0E-5) {
    bool isApprox = true;
    for(int i=0; i<10; ++i) {
       isApprox &= std::abs(A.matrix[i] - B.matrix[i]) < Eps;
@@ -70,7 +71,7 @@ bool IsApprox(const Covariance4D<Vector>& A, const Covariance4D<Vector>& B, floa
    return isApprox;
 }
 
-std::ostream& operator<<(std::ostream& out, const Covariance4D<Vector>& A) {
+std::ostream& operator<<(std::ostream& out, const Cov& A) {
    for(int i=0; i<10; ++i) {
       out << A.matrix[i] << ", ";
    }
@@ -80,9 +81,9 @@ std::ostream& operator<<(std::ostream& out, const Covariance4D<Vector>& A) {
 int TestRotation() {
    int nb_fails = 0;
 
-   Covariance4D<Vector> A, B;
+   Cov A, B;
 
-   A = B = Covariance4D<Vector>(1.0, 0.0, 1.0, 0.0);
+   A = B = Cov(1.0, 0.0, 1.0, 0.0);
    A.Rotate(2.0*M_PI);
    if(!IsApprox(A, B)) {
       std::cerr << "Error: 2π rotation is not indempotent" << std::endl;
@@ -113,11 +114,11 @@ int TestRotation() {
 int TestShear() {
    int nb_fails = 0;
 
-   Covariance4D<Vector> A, B;
+   Cov A, B;
    float c = 123.456;
    float d = 765.432;
 
-   A = B = Covariance4D<Vector>(1.0, 2.0, 3.0, 4.0);
+   A = B = Cov(1.0, 2.0, 3.0, 4.0);
    A.ShearAngleSpace( c,  d);
    A.ShearAngleSpace(-c, -d);
 
@@ -128,7 +129,7 @@ int TestShear() {
       ++nb_fails;
    }
 
-   A = B = Covariance4D<Vector>(1.0, 2.0, 3.0, 4.0);
+   A = B = Cov(1.0, 2.0, 3.0, 4.0);
    A.ShearSpaceAngle( c,  d);
    A.ShearSpaceAngle(-c, -d);
 
@@ -139,8 +140,8 @@ int TestShear() {
       ++nb_fails;
    }
 
-   A = Covariance4D<Vector>(1.0, 2.0, 0.0, 0.0);
-   B = Covariance4D<Vector>(0.0, 0.0, 1.0, 2.0);
+   A = Cov(1.0, 2.0, 0.0, 0.0);
+   B = Cov(0.0, 0.0, 1.0, 2.0);
    A.Travel(1);
    A.Curvature(-1, -1);
    if(!IsApprox(A, B)) {
@@ -151,7 +152,7 @@ int TestShear() {
    }
 
    // Mimicking a lens looking at the plane in focus
-   A = Covariance4D<Vector>(1.0, 1.0, 0.0, 0.0);
+   A = Cov(1.0, 1.0, 0.0, 0.0);
    B = A;
    A.Travel(1);
    A.Curvature(-2, -2);
@@ -180,7 +181,7 @@ int TestProjection() {
    std::cout << Vector::Cross(y, z) << " : " << x << std::endl;
    */
 
-   Covariance4D<Vector> A(matrix, x, y, z), B(matrix, x, y, z);
+   Cov A(matrix, x, y, z), B(matrix, x, y, z);
 
    A.Projection(z);
    if(!IsApprox(A, B)) {
@@ -198,7 +199,7 @@ int TestProjection() {
    y = Vector(0.5, 0.0,  0.5); y.Normalize();
    z = Vector(0.5, 0.0, -0.5); z.Normalize();
    Vector o = y;
-   A = Covariance4D<Vector>(matrix, x, y, z);
+   A = Cov(matrix, x, y, z);
    A.Travel(1);
    B = A; B.Symmetry(); // Reflection mirror along Y
    //std::cout << "A: " << A << std::endl;
@@ -235,7 +236,7 @@ int TestProjection() {
    y = Vector( 0,-1, 0);
    z = Vector( 0, 0,-1);
    n = Vector( 0, 0, 1);
-   A = Covariance4D<Vector>(matrix, x, y, z);
+   A = Cov(matrix, x, y, z);
    B = A;
    //std::cout << "A: " << A << std::endl;
    A.Projection(n);
@@ -267,9 +268,9 @@ int TestProjection() {
 int TestReflection() {
    int nb_fails = 0;
 
-   Covariance4D<Vector> A(0.0f, 0.0f, 1.0f, 1.0f);
-   Covariance4D<Vector> B = A;
-   Covariance4D<Vector> Z(0.0f, 0.0f, 0.0f, 0.0f);
+   Cov A(0.0f, 0.0f, 1.0f, 1.0f);
+   Cov B = A;
+   Cov Z(0.0f, 0.0f, 0.0f, 0.0f);
 
    A.Reflection(0.0f, 0.0f);
    if(!IsApprox(A, Z)) {
@@ -298,7 +299,7 @@ int TestOrientation() {
    std::array<float, 10> matrix;
    float r, k;
    Vector x, y, z, n, o;
-   Covariance4D<Vector> A, B;
+   Cov A, B;
 
    {
    matrix = {1.0,
@@ -312,7 +313,7 @@ int TestOrientation() {
    z = Vector( 1, 0,-1); z.Normalize();
    n = Vector( 0, 0, 1);
    o = Vector( 0, 1, 1); o.Normalize();
-   A = Covariance4D<Vector>(matrix, x, y, z);
+   A = Cov(matrix, x, y, z);
    B = A;
    //std::cout << "A: " << A << std::endl;
    A.Projection(n);

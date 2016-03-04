@@ -13,7 +13,7 @@ std::uniform_real_distribution<double> dist(0,1);
 // Covariance Tracing includes
 #include <Covariance/Covariance4D.hpp>
 using namespace Covariance;
-using Cov    = Covariance4D<Vector>;
+using Cov    = Covariance4D<Vector, double>;
 using RadCov = std::pair<Vector, Cov>;
 
 
@@ -85,7 +85,7 @@ RadCov radiance(const Ray &r, int depth, int maxdepth=1){
       const RadCov radcov = radiance(Ray(x, wi), depth+1);
 
       /* Covariance computation */
-      Covariance4D<Vector> cov = radcov.second;
+      Cov cov = radcov.second;
       cov.Projection(nl);
       cov.Curvature(k, k);
       cov.Cosine(1.0f);
@@ -127,7 +127,7 @@ int main(int argc, char** argv){
             for (int sx=0; sx<2; sx++){
 
                Vector _r;
-               Covariance4D<Vector> _cov;
+               Cov _cov;
 
                for (int s=0; s<samps; s++){
 

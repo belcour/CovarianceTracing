@@ -15,6 +15,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 
 std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
@@ -116,7 +117,7 @@ void RadianceTexture() {
          float _r = 0.0f;
          // Generate the pixel direction
          Vector d = cx*((dx + x)/float(width)  - .5) +
-            cy*((dy + y)/float(height) - .5) + cam.d;
+                    cy*((dy + y)/float(height) - .5) + cam.d;
          d.Normalize();
 
          Ray ray(cam.o, d);
@@ -297,7 +298,7 @@ PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
    }
 }
 
-void BruteForceTexture(int samps = 1000) {
+void BruteForceTexture(int samps = 10000) {
 
    std::vector<PosFilter> _filter_elems;
 
@@ -372,12 +373,13 @@ void Draw() {
 
    if(generateCovariance) {
       CovarianceTexture();
-
-      glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, texs_id[1]);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, cov_img);
+   } else {
+      std::fill(cov_img, cov_img+width*height, 0.0f);
    }
+   glActiveTexture(GL_TEXTURE1);
+   glBindTexture(GL_TEXTURE_2D, texs_id[1]);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, cov_img);
 
    if(generateReference) {
       BruteForceTexture();
@@ -490,6 +492,9 @@ int main(int argc, char** argv) {
    cam.o = cam.o + 140.0*cam.d;
    ncx.Normalize();
    ncy.Normalize();
+
+   mouse.X = 0.5;
+   mouse.Y = 0.5;
 
    PrintHelp();
 

@@ -9,7 +9,7 @@
 #include "Matrix.hpp"
 
 #define COV_MAX_FLOAT 1.0E+5
-#define COV_MIN_FLOAT 1.0E-10
+#define COV_MIN_FLOAT 1.0E-5
 
 namespace Covariance {
 
@@ -381,7 +381,7 @@ namespace Covariance {
 
          // The outgoing filter is the inverse submatrix of this inverse
          // matrix.
-         Float det = inverse[0]*inverse[5]-inverse[1]*inverse[1];
+         Float det = (inverse[0]*inverse[5]-inverse[1]*inverse[1]) / pow(M_PI, 4);
          sxx =  inverse[5] / det;
          syy =  inverse[0] / det;
          sxy = -inverse[1] / det;

@@ -23,9 +23,9 @@ std::uniform_real_distribution<double> dist(0,1);
 #include "common.hpp"
 #include "opengl.hpp"
 
-
-Material phongH(Vector(), Vector(), Vector(1,1,1)*.999, 1.E5);
-Material phongL(Vector(), Vector(), Vector(1,1,1)*.999, 1.E1);
+// Scene description
+Material phongH(Vector(), Vector(), Vector(1,1,1)*.999, 1.E3);
+Material phongL(Vector(), Vector(), Vector(1,1,1)*.999, 1.E2);
 
 std::vector<Sphere> spheres = {
    Sphere(Vector(27,16.5,47),        16.5, phongH),//RightSp
@@ -39,22 +39,23 @@ std::vector<Sphere> spheres = {
    Sphere(Vector(50,681.6-.27,81.6), 600,  Vector(12,12,12),  Vector()) //Lite
 };
 
-// Texture for the background + size
-int width = 512, height = 512;
-float* background = new float[width*height];
-bool   generateBackground = true;
-int    nPasses = 0;
+// Texture for the bcg_img + size
+int  width = 512, height = 512;
+bool generateBackground = true;
+int  nPasses = 0;
 
 ShaderProgram* program;
 
-GLuint texs_id[2];
+// Different buffer, the background image, the covariance filter and the brute
+// force filter.
+GLuint texs_id[3];
+float* bcg_img = new float[width*height];
+float* cov_img = new float[width*height];
+float* ref_img = new float[width*height];
 
-float gl_time = 0.0f;
-
-float* pixels = new float[width*height];
-Ray cam(Vector(50,52,295.6), Vector(0,-0.042612,-1).Normalize()); // cam pos, dir
-
-double fov   = 1.2;
+// Camera frame
+Ray cam(Vector(50,52,295.6), Vector(0,-0.042612,-1).Normalize());
+double fov  = 1.2;
 Vector  cx  = Vector(width*fov/height);
 Vector  cy  = Vector::Cross(cx, cam.d).Normalize()*fov;
 Vector ncx  = cx;
@@ -65,9 +66,9 @@ std::stringstream sout;
 void ExportImage() {
    Vector* img = new Vector[width*height];
    for(int i=0; i<width*height; ++i) {
-      img[i].x = background[i] + pixels[i];
-      img[i].y = background[i];
-      img[i].z = background[i];
+      img[i].x = bcg_img[i] + cov_img[i];
+      img[i].y = bcg_img[i];
+      img[i].z = bcg_img[i];
    }
 
    int ret = SaveEXR(img, width, height, "output.exr");
@@ -114,7 +115,7 @@ void RadianceTexture() {
          Ray ray(cam.o, d);
          Vector radiance = Radiance(spheres, ray, 0, 1);
 
-         background[i] = (float(nPasses)*background[i] + radiance.x) / float(nPasses+1);
+         bcg_img[i] = (float(nPasses)*bcg_img[i] + radiance.x) / float(nPasses+1);
       }
    }
 
@@ -154,7 +155,6 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
 
    // if the max depth is reached
    if(depth >= maxdepth) {
-      //cov2.matrix[1] = - cov2.matrix[1];
       return PosCov(x, cov2);
    } else {
       // Sample a new direction
@@ -168,9 +168,9 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
       out << "Volume = " << cov2.Volume() << std::endl;
       out << std::endl;
 
-      //cov2.Cosine(1.0f);
-      //out << "After cosine multiplication" << std::endl;
-      //out << cov2 << std::endl;
+      cov2.Cosine(1.0f);
+      out << "After cosine multiplication" << std::endl;
+      out << cov2 << std::endl;
 
       cov2.Symmetry();
       out << "After symmetry" << std::endl;
@@ -219,7 +219,7 @@ void CovarianceTexture() {
    try {
       surfCov.second.SpatialFilter(sxx, sxy, syy);
    } catch (...) {
-      sout << "Error: incorrect spatial filter" << std::endl;
+      std::cout << "Error: incorrect spatial filter" << std::endl;
       sout << surfCov.second << std::endl;
       return;
    }
@@ -249,15 +249,8 @@ void CovarianceTexture() {
          const double dv  = Vector::Dot(dx, surfCov.second.y);
          const double dt  = Vector::Dot(dx, surfCov.second.z);
 
-/*
-         double bf  = du*du*surfCov.second.matrix[0]
-                    + dv*dv*surfCov.second.matrix[2]
-                    + 2*du*dv*surfCov.second.matrix[1];
-         bf /= pow(M_PI, 2);
-/*/
          double bf = du*du*sxx + dv*dv*syy + 2*du*dv*sxy;
-//*/
-         pixels[i] = exp(-100.0*dt*dt) * exp(- 0.5* bf);
+         cov_img[i] = exp(-10.0*dt*dt) * exp(- 0.5* bf);
       }
    }
 }
@@ -266,17 +259,18 @@ void Draw() {
 
    if(generateBackground) {
       RadianceTexture();
+
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, texs_id[0]);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, bcg_img);
    }
-   glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, texs_id[0]);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, background);
 
    CovarianceTexture();
    glActiveTexture(GL_TEXTURE1);
    glBindTexture(GL_TEXTURE_2D, texs_id[1]);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, pixels);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, cov_img);
 
    program->use();
 
@@ -305,9 +299,6 @@ void Init() {
    // Background color
    glClearColor(0.0f, 0.0f, 0.0f, 2.0f);
 
-   // Load textures
-   background = new float[width*height];
-
    // Create the shader programs
    program = new ShaderProgram(false);
    std::string vertShader =
@@ -318,35 +309,18 @@ void Init() {
    std::string fragShader =
       "uniform sampler2D tex0;"
       "uniform sampler2D tex1;"
+      "uniform sampler2D tex2;"
       "uniform vec2      pointer;"
       "uniform float     width;"
       "uniform float     height;"
       "void main(void) {"
       "  float fact = exp(- width*height * pow(length(gl_TexCoord[0].xy - pointer.xy), 2.0));"
-      "  gl_FragColor = vec4(0,0,1,1)*fact + vec4(1,1,1,1)*texture2D(tex0, gl_TexCoord[0].st) + vec4(1,0,0,1)*texture2D(tex1, gl_TexCoord[0].st);"
+      "  gl_FragColor = vec4(0,0,1,1)*fact + vec4(1,1,1,1)*texture2D(tex0, gl_TexCoord[0].st) + vec4(1,0,0,1)*texture2D(tex1, gl_TexCoord[0].st) + vec4(0,1,0,1)*texture2D(tex2, gl_TexCoord[0].st);"
       "}";
    program->initFromStrings(vertShader, fragShader);
 
    // Reserve textures on the GPU
-   glGenTextures(2, texs_id);
-
-   // Load the background texture
-   int w, h;
-   float* img; const char* err;
-   int ret = LoadEXR(&img, &w, &h, "ref.exr", &err);
-   if(width != w || height != h) exit(EXIT_FAILURE);
-   float* pixels = new float[width*height];
-   for(int y=0; y<h; ++y)
-      for(int x=0; x<w; ++x) {
-         int i=(h-y-1)*w+x;
-         int j=(w-x-1)*h+y;
-         pixels[j] = img[i*4];
-      }
-   glBindTexture(GL_TEXTURE_2D, texs_id[0]);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, pixels);
-   delete[] img;
-   delete[] pixels;
+   glGenTextures(3, texs_id);
 
    // Define the different uniform locations in the shader
    program->use();
@@ -355,6 +329,8 @@ void Init() {
    glUniform1i(t1Location, 0);
    const auto t2Location = program->addUniform("tex1");
    glUniform1i(t2Location, 1);
+   const auto t3Location = program->addUniform("tex2");
+   glUniform1i(t3Location, 2);
 
    const auto uniWidth = program->addUniform("width");
    glUniform1f(uniWidth, float(width));
@@ -365,17 +341,21 @@ void Init() {
    glUniform2f(uniLocation, width*mouse.X, height*mouse.Y);
 
    program->disable();
+
+   // Clean buffer memory
+   memset(ref_img, 0.0, width*height);
+   memset(cov_img, 0.0, width*height);
 }
 
 void PrintHelp() {
-   std::cout << "CovarianceTracing tutorial 2" << std::endl;
+   std::cout << "Covariance Tracing tutorial 2" << std::endl;
    std::cout << "----------------------------" << std::endl;
    std::cout << std::endl;
    std::cout << "This tutorial display the indirect pixel filter after one bounce for" << std::endl;
    std::cout << "non-diffuse surfaces. To display the filter, click on one of the two" << std::endl;
    std::cout << "shiny spheres." << std::endl;
    std::cout << std::endl;
-   std::cout << " + 'b' stop/resume rendering the background image" << std::endl;
+   std::cout << " + 'b' stop/resume rendering the bcg_img image" << std::endl;
    std::cout << " + 'p' output image to EXR file" << std::endl;
    std::cout << " + 'd' print Covariance Tracing step by step" << std::endl;
    std::cout << " + '+' increase the BRDF exponent for the right sphere" << std::endl;
@@ -394,7 +374,7 @@ int main(int argc, char** argv) {
    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
 
    glutInitWindowSize(width, height);
-   glutCreateWindow("CovarianceTracing tutorial 2");
+   glutCreateWindow("Covariance Tracing tutorial 2");
 
    Init();
 
@@ -404,8 +384,8 @@ int main(int argc, char** argv) {
    glutKeyboardFunc(KeyboardKeys);
    glutMainLoop();
 
-   if(background) {
-      delete[] background;
-   }
+   if(bcg_img) { delete[] bcg_img; }
+   if(cov_img) { delete[] cov_img; }
+   if(ref_img) { delete[] ref_img; }
    return EXIT_SUCCESS;
 }

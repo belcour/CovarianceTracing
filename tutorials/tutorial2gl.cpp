@@ -41,11 +41,13 @@ std::vector<Sphere> spheres = {
 };
 
 // Texture for the bcg_img + size
-int  width = 512, height = 512;
-bool generateBackground = true;
-bool generateCovariance = true;
-bool generateReference  = false;
-int  nPasses = 0;
+int   width = 512, height = 512;
+bool  generateBackground = true;
+bool  generateCovariance = true;
+bool  generateReference  = false;
+int   nPasses = 0;
+int   nPassesFilter = 0;
+float filterRadius = 0.25f;
 
 ShaderProgram* program;
 
@@ -83,7 +85,10 @@ void KeyboardKeys(unsigned char key, int x, int y) {
       memset(cov_img, 0.0, width*height);
       generateCovariance = !generateCovariance;
    } else if(key == 'B') {
+      memset(ref_img, 0.0, width*height);
       generateReference = !generateReference;
+      nPassesFilter = 0;
+      filterRadius  = 1.0f;
    } else if(key == 'b') {
       generateBackground = !generateBackground;
    } else if(key == '+') {
@@ -298,21 +303,20 @@ PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
    }
 }
 
-void BruteForceTexture(int samps = 10000) {
+void BruteForceTexture(int samps = 100) {
 
    std::vector<PosFilter> _filter_elems;
 
    // Generate a covariance matrix at the sampling position
    int x = width*mouse.X, y = height*mouse.Y;
-   const double sigma = .5f;
 
    // Sub pixel sampling
    for (int s=0; s<samps; s++){
 
       // Generate a sub-pixel random position to perform super
       // sampling.
-      double dx=2*dist(gen);
-      double dy=2*dist(gen);
+      double dx=dist(gen);
+      double dy=dist(gen);
 
       // Generate the pixel direction
       Vector d = cx*((dx + x)/width  - .5) +
@@ -352,12 +356,21 @@ void BruteForceTexture(int samps = 10000) {
 
          for(auto& elem : _filter_elems) {
             const auto& p = elem.first;
-            _r += (10.0f/sigma)* exp(-(.5f/(sigma*sigma))*pow(Vector::Norm(hitp-p), 2));
+            const auto  x = Vector::Norm(hitp-p) / filterRadius;
+            _r += 50.0f*(0.3989422804f/filterRadius) * exp(-0.5f * pow(x, 2));
          }
 
-         ref_img[i] = _r / float(samps);
+         const auto Nold = nPassesFilter * samps;
+         const auto Nnew = (nPassesFilter+1) * samps;
+         ref_img[i] = (ref_img[i]*Nold + _r) / float(Nnew);
       }
    }
+   
+   // Progressive refinement of the radius and number of passes
+   filterRadius *= sqrt((nPassesFilter + 0.5) / (nPassesFilter + 1.0));
+   ++nPassesFilter;
+   
+   glutPostRedisplay();
 }
 
 void Draw() {
@@ -389,7 +402,7 @@ void Draw() {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, ref_img);
 
-      generateReference = false;
+      //generateReference = false;
    }
 
    program->use();

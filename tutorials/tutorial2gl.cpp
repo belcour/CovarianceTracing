@@ -514,6 +514,7 @@ void PrintHelp() {
    std::cout << "shiny spheres." << std::endl;
    std::cout << std::endl;
    std::cout << " + 'b' stop/resume rendering the background image" << std::endl;
+   std::cout << " + 'h' hide/show the background image" << std::endl;
    std::cout << " + 'c' stop/resume rendering the covariance filter" << std::endl;
    std::cout << " + 'B' brute-force indirect pixel filter (SLOW)" << std::endl;
    std::cout << " + 'p' output image to EXR file" << std::endl;

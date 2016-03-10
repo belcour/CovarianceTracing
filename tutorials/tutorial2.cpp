@@ -8,6 +8,7 @@ std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
 
 // Local includes
+#define _USE_MATH_DEFINES
 #include "common.hpp"
 
 Material phong(Vector(), Vector(), Vector(1,1,1)*.999, 1.E3);

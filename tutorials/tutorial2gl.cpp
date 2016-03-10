@@ -1,12 +1,3 @@
-// OpenGL includes
-#ifdef __APPLE__
-#include <glut.h>
-#include <gl.h>
-#else
-#include <GL/glut.h>
-#include <GL/gl.h>
-#endif
-
 // STL includes
 #include <cstdlib>
 #include <cstdio>
@@ -21,6 +12,7 @@ std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
 
 // Local includes
+#define _USE_MATH_DEFINES
 #include "common.hpp"
 #include "opengl.hpp"
 

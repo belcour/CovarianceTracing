@@ -8,6 +8,7 @@ std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
 
 // Local includes
+#define _USE_MATH_DEFINES
 #include "common.hpp"
 
 // Covariance Tracing includes

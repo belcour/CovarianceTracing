@@ -46,9 +46,9 @@ bool  generateBackground = true;
 bool  displayBackground  = true;
 bool  generateCovariance = true;
 bool  generateReference  = false;
-int   nPasses = 0;
-int   nPassesFilter = 0;
-float filterRadius = 0.25f;
+int   nPasses            = 0;
+int   nPassesFilter      = 0;
+float filterRadius       = 1.0f;
 
 ShaderProgram* program;
 
@@ -309,14 +309,19 @@ void BruteForceTexture(int samps = 100) {
 
    std::vector<PosFilter> _filter_elems;
 
-   // Generate a covariance matrix at the sampling position
+   // Check pixel position and clean the filter if there was any motion of the
+   // mouse.
    int x = width*mouse.X, y = height*mouse.Y;
+   if(fabs(mouse.Dx) > 0.0f || fabs(mouse.Dy) > 0.0f) {
+      nPassesFilter = 0;
+      filterRadius  = 1.0f;
+   }
 
    // Sub pixel sampling
+   #pragma omp parallel for schedule(dynamic, 1)
    for (int s=0; s<samps; s++){
 
-      // Generate a sub-pixel random position to perform super
-      // sampling.
+      // Generate a sub-pixel random position to perform super sampling.
       double dx=dist(gen);
       double dy=dist(gen);
 
@@ -335,14 +340,20 @@ void BruteForceTexture(int samps = 100) {
                    scaleY = Vector::Norm(cy) / double(height);
 
       // Evaluate the Covariance and Radiance at the pixel location
-      _filter_elems.push_back(indirect_filter(Ray(cam.o, d), 0, 1));
+      const auto filter = indirect_filter(Ray(cam.o, d), 0, 1);
+      #pragma omp critical
+      {
+        _filter_elems.push_back(filter);
+      }
    }
 
    // Loop over the rows and columns of the image and evaluate radiance and
    // covariance per pixel using Monte-Carlo.
-   float max_ref = 0.0;
+   float max_ref = 0.0f;
    #pragma omp parallel for schedule(dynamic, 1), shared(max_ref)
    for (int y=0; y<height; y++){
+      float max_temp = 0.0f;
+
       for (int x=0; x<width; x++) {
          int i=(width-x-1)*height+y;
          float _r = 0.0f;
@@ -367,11 +378,12 @@ void BruteForceTexture(int samps = 100) {
          const auto Nold  = nPassesFilter * samps;
          const auto Nnew  = (nPassesFilter+1) * samps;
          ref_img[i] = (ref_img[i]*Nold + scale*_r) / float(Nnew);
+         max_temp   = std::max(ref_img[i], max_temp);
+      }
 
-         #pragma omp critical
-         {
-            max_ref = std::max(max_ref, ref_img[i]);
-         }
+      #pragma omp critical
+      {
+         max_ref = std::max(max_ref, max_temp);
       }
    }
 
@@ -428,7 +440,6 @@ void Draw() {
    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
    auto uniLocation = program->uniform("pointer");
    glUniform2f(uniLocation, mouse.Y, 1.0-mouse.X);
-
 
    // Update the scaling
    glUniform1f(program->uniform("tex0scale"), displayBackground  ? bcg_scale : 0.0f);

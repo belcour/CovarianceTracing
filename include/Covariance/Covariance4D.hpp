@@ -381,7 +381,7 @@ namespace Covariance {
 
          // The outgoing filter is the inverse submatrix of this inverse
          // matrix.
-         Float det = (inverse[0]*inverse[5]-inverse[1]*inverse[1]) / pow(M_PI, 4);
+         Float det = (inverse[0]*inverse[5]-inverse[1]*inverse[1]) / pow(2.0*M_PI, 2);
          sxx =  inverse[5] / det;
          syy =  inverse[0] / det;
          sxy = -inverse[1] / det;

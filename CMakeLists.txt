@@ -2,12 +2,12 @@ cmake_minimum_required (VERSION 3.2)
 project (CovarianceTracing CXX)
 
 # For debug build
-set(CMAKE_BUILD_TYPE DEBUG)
+set(CMAKE_BUILD_TYPE RELEASE)
 
-if ( CMAKE_COMPILER_IS_GNUCC )
-   add_definitions ("-Wall -pedantic -fopenmp")
+if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
+   add_definitions ("-Wall -pedantic  -Wno-deprecated -Wno-deprecated-declarations")
+   add_definitions ("-Ofast -ffast-math -fopenmp")
 endif ( CMAKE_COMPILER_IS_GNUCC )
-add_definitions ("-Og -ffast-math -Wno-deprecated -Wno-deprecated-declarations")
 
 include_directories ("include" "modules" ".")
 

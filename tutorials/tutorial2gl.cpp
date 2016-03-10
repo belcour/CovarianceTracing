@@ -87,8 +87,6 @@ void KeyboardKeys(unsigned char key, int x, int y) {
       generateCovariance = !generateCovariance;
    } else if(key == 'B') {
       generateReference = !generateReference;
-      nPassesFilter = 0;
-      filterRadius  = 1.0f;
    } else if(key == 'b') {
       generateBackground = !generateBackground;
    } else if(key == 'h') {
@@ -391,7 +389,7 @@ void BruteForceTexture(int samps = 100) {
    ref_scale = 1.0f/max_ref;
 
    // Progressive refinement of the radius and number of passes
-   filterRadius *= sqrt((nPassesFilter + 0.5) / (nPassesFilter + 1.0));
+   filterRadius *= sqrt((nPassesFilter + 0.8) / (nPassesFilter + 1.0));
    ++nPassesFilter;
 
    glutPostRedisplay();

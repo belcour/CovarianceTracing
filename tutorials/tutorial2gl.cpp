@@ -71,10 +71,12 @@ std::stringstream sout;
 
 void ExportImage() {
    Vector* img = new Vector[width*height];
+   int x = width*mouse.X, y = height*mouse.Y;
+   int index = (width-x-1)*height+y;
    for(int i=0; i<width*height; ++i) {
-      img[i].x = bcg_img[i] + cov_img[i];
-      img[i].y = bcg_img[i];
-      img[i].z = bcg_img[i];
+      img[i].x = bcg_img[i] + cov_scale*cov_img[i];
+      img[i].y = bcg_img[i] + ref_scale*ref_img[i];
+      img[i].z = bcg_img[i] + (index == i ? 1.0f : 0.0f);
    }
 
    int ret = SaveEXR(img, width, height, "output.exr");

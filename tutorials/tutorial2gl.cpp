@@ -43,6 +43,7 @@ std::vector<Sphere> spheres = {
 // Texture for the bcg_img + size
 int   width = 512, height = 512;
 bool  generateBackground = true;
+bool  displayBackground  = true;
 bool  generateCovariance = true;
 bool  generateReference  = false;
 int   nPasses = 0;
@@ -54,9 +55,9 @@ ShaderProgram* program;
 // Different buffer, the background image, the covariance filter and the brute
 // force filter.
 GLuint texs_id[3];
-float* bcg_img = new float[width*height];
-float* cov_img = new float[width*height];
-float* ref_img = new float[width*height];
+float* bcg_img = new float[width*height]; float bcg_scale = 1.0f;
+float* cov_img = new float[width*height]; float cov_scale = 1.0f;
+float* ref_img = new float[width*height]; float ref_scale = 1.0f;
 
 // Camera frame
 Ray cam(Vector(50,52,295.6), Vector(0,-0.042612,-1).Normalize());
@@ -85,12 +86,13 @@ void KeyboardKeys(unsigned char key, int x, int y) {
       memset(cov_img, 0.0, width*height);
       generateCovariance = !generateCovariance;
    } else if(key == 'B') {
-      memset(ref_img, 0.0, width*height);
       generateReference = !generateReference;
       nPassesFilter = 0;
       filterRadius  = 1.0f;
    } else if(key == 'b') {
       generateBackground = !generateBackground;
+   } else if(key == 'h') {
+      displayBackground  = !displayBackground;
    } else if(key == '+') {
       Material phong(Vector(), Vector(), Vector(1,1,1)*.999, spheres[1].mat.exponent * 10);
       spheres[1].mat = phong;
@@ -338,7 +340,8 @@ void BruteForceTexture(int samps = 100) {
 
    // Loop over the rows and columns of the image and evaluate radiance and
    // covariance per pixel using Monte-Carlo.
-   #pragma omp parallel for schedule(dynamic, 1)
+   float max_ref = 0.0;
+   #pragma omp parallel for schedule(dynamic, 1), shared(max_ref)
    for (int y=0; y<height; y++){
       for (int x=0; x<width; x++) {
          int i=(width-x-1)*height+y;
@@ -357,19 +360,28 @@ void BruteForceTexture(int samps = 100) {
          for(auto& elem : _filter_elems) {
             const auto& p = elem.first;
             const auto  x = Vector::Norm(hitp-p) / filterRadius;
-            _r += 50.0f*(0.3989422804f/filterRadius) * exp(-0.5f * pow(x, 2));
+            _r += (0.3989422804f/filterRadius) * exp(-0.5f * pow(x, 2)) * elem.second.x;
          }
 
-         const auto Nold = nPassesFilter * samps;
-         const auto Nnew = (nPassesFilter+1) * samps;
-         ref_img[i] = (ref_img[i]*Nold + _r) / float(Nnew);
+         const auto scale = 20.f;
+         const auto Nold  = nPassesFilter * samps;
+         const auto Nnew  = (nPassesFilter+1) * samps;
+         ref_img[i] = (ref_img[i]*Nold + scale*_r) / float(Nnew);
+
+         #pragma omp critical
+         {
+            max_ref = std::max(max_ref, ref_img[i]);
+         }
       }
    }
-   
+
+   // Update the scaling
+   ref_scale = 1.0f/max_ref;
+
    // Progressive refinement of the radius and number of passes
    filterRadius *= sqrt((nPassesFilter + 0.5) / (nPassesFilter + 1.0));
    ++nPassesFilter;
-   
+
    glutPostRedisplay();
 }
 
@@ -386,13 +398,12 @@ void Draw() {
 
    if(generateCovariance) {
       CovarianceTexture();
-   } else {
-      std::fill(cov_img, cov_img+width*height, 0.0f);
+
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, texs_id[1]);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, cov_img);
    }
-   glActiveTexture(GL_TEXTURE1);
-   glBindTexture(GL_TEXTURE_2D, texs_id[1]);
-   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, cov_img);
 
    if(generateReference) {
       BruteForceTexture();
@@ -401,8 +412,6 @@ void Draw() {
       glBindTexture(GL_TEXTURE_2D, texs_id[2]);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_LUMINANCE, GL_FLOAT, ref_img);
-
-      //generateReference = false;
    }
 
    program->use();
@@ -419,6 +428,12 @@ void Draw() {
    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
    auto uniLocation = program->uniform("pointer");
    glUniform2f(uniLocation, mouse.Y, 1.0-mouse.X);
+
+
+   // Update the scaling
+   glUniform1f(program->uniform("tex0scale"), displayBackground  ? bcg_scale : 0.0f);
+   glUniform1f(program->uniform("tex1scale"), generateCovariance ? cov_scale : 0.0f);
+   glUniform1f(program->uniform("tex2scale"), generateReference  ? ref_scale : 0.0f);
 
    glBegin(GL_QUADS);
    glVertex3f(-1.0f,-1.0f, 0.0f); glTexCoord2f(0, 0);
@@ -443,15 +458,15 @@ void Init() {
       "   gl_Position    = vec4(gl_Vertex);"
       "}";
    std::string fragShader =
-      "uniform sampler2D tex0;"
-      "uniform sampler2D tex1;"
-      "uniform sampler2D tex2;"
+      "uniform sampler2D tex0; uniform float tex0scale;"
+      "uniform sampler2D tex1; uniform float tex1scale;"
+      "uniform sampler2D tex2; uniform float tex2scale;"
       "uniform vec2      pointer;"
       "uniform float     width;"
       "uniform float     height;"
       "void main(void) {"
       "  float fact = exp(- width*height * pow(length(gl_TexCoord[0].xy - pointer.xy), 2.0));"
-      "  gl_FragColor = vec4(0,0,1,1)*fact + vec4(1,1,1,1)*texture2D(tex0, gl_TexCoord[0].st) + vec4(1,0,0,1)*texture2D(tex1, gl_TexCoord[0].st) + vec4(0,1,0,1)*texture2D(tex2, gl_TexCoord[0].st);"
+      "  gl_FragColor = vec4(0,0,1,1)*fact + tex0scale*vec4(1,1,1,1)*texture2D(tex0, gl_TexCoord[0].st) + tex1scale*vec4(1,0,0,1)*texture2D(tex1, gl_TexCoord[0].st) + tex2scale*vec4(0,1,0,1)*texture2D(tex2, gl_TexCoord[0].st);"
       "}";
    program->initFromStrings(vertShader, fragShader);
 
@@ -467,6 +482,13 @@ void Init() {
    glUniform1i(t2Location, 1);
    const auto t3Location = program->addUniform("tex2");
    glUniform1i(t3Location, 2);
+
+   const auto t1sLocation = program->addUniform("tex0scale");
+   glUniform1f(t1sLocation, bcg_scale);
+   const auto t2sLocation = program->addUniform("tex1scale");
+   glUniform1f(t2sLocation, cov_scale);
+   const auto t3sLocation = program->addUniform("tex2scale");
+   glUniform1f(t3sLocation, ref_scale);
 
    const auto uniWidth = program->addUniform("width");
    glUniform1f(uniWidth, float(width));

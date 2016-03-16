@@ -8,9 +8,6 @@
 #include <random>
 #include <utility>
 
-std::default_random_engine _gen;
-std::uniform_real_distribution<double> _dist(0,1);
-
 double Clamp(double x) {
    return x<0 ? 0 : x>1 ? 1 : x;
 }
@@ -121,12 +118,13 @@ struct Camera {
       return (d + (uv.x-.5)*fx*cx + (uv.y-0.5)*fy*cy).Normalize();
    }
 
-   // TODO: Finish implementation
+#ifdef TODO
    Vector DirectionToPixel(const Vector dir) const {
       double u,v;
       u = Vector::Dot(dir, cx);
       v = Vector::Dot(dir, cy);
    }
+#endif
 };
 
 struct Material {
@@ -215,6 +213,19 @@ struct Sphere {
    }
 };
 
+/* Random number generator using the STL random and unfiorm distribution
+ */
+struct Random {
+
+   Random(unsigned int seed) : _gen(seed), _dist(0.0, 1.0) {}
+   Random() : _gen(clock()), _dist(0.0, 1.0) {}
+
+   double operator()() { return _dist(_gen); }
+
+   std::default_random_engine _gen;
+   std::uniform_real_distribution<double> _dist;
+};
+
 /* 'Intersect' routine return the intersection of a ray with a vector of spheres.
  * this method return true if a sphere is intersected and false if nothing is
  * hit. If a hit is found, 't' contain the distance to the hit point and 'id' the
@@ -231,7 +242,11 @@ inline bool Intersect(const std::vector<Sphere>& spheres, const Ray &r, double &
  * to rapidly prototype in practice. This code assumes that light sources do not
  * scatter light.
  */
-Vector Radiance(const std::vector<Sphere>& spheres, const Ray &r, int depth, int maxdepth=1){
+Vector Radiance(const std::vector<Sphere>& spheres,
+                const Ray &r,
+                Random& rng,
+                int depth,
+                int maxdepth=1) {
    double t;                               // distance to intersection
    int id=0;                               // id of intersected object
    if (!Intersect(spheres, r, t, id)) return Vector(); // if miss, return black
@@ -241,11 +256,6 @@ Vector Radiance(const std::vector<Sphere>& spheres, const Ray &r, int depth, int
    Vector x  = r.o+r.d*t;
    Vector n  = (x-obj.c).Normalize();
    Vector nl = (Vector::Dot(n, r.d) < 0.f) ? n : (-1.f)*n;
-
-   /* Local Frame at the surface of the object */
-   Vector w = nl;
-   Vector u = Vector::Cross((fabs(w.x) > .1 ? Vector(0,1,0) : Vector(1,0,0)), w).Normalize();
-   Vector v = Vector::Cross(w, u);
 
    // If the object is a source return radiance
    if(!mat.ke.IsNull()) {
@@ -258,14 +268,14 @@ Vector Radiance(const std::vector<Sphere>& spheres, const Ray &r, int depth, int
    // Ray shooting
    } else {
       double pdf = 0.f;
-      const auto e  = Vector(_dist(_gen), _dist(_gen), _dist(_gen));
+      const auto e  = Vector(rng(), rng(), rng());
       const auto wo = -r.d;
       const auto wi = mat.Sample(wo, nl, e, pdf);
       if(Vector::Dot(wo, nl) <= 0.f || pdf <= 0.f) {
       	 return Vector();
       }
       auto f = Vector::Dot(wi, nl)*mat.Reflectance(wi, wo, nl);
-      const Vector rad = Radiance(spheres, Ray(x, wi), depth+1);
+      const Vector rad = Radiance(spheres, Ray(x, wi), rng, depth+1, maxdepth);
 
       return (1.f/pdf) * f.Multiply(rad);
    }

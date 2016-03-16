@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <thread>
 
 std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
@@ -65,10 +66,23 @@ void ExportImage() {
    Vector* img = new Vector[width*height];
    int x = width*mouse.X, y = height*mouse.Y;
    int index = (width-x-1)*height+y;
-   for(int i=0; i<width*height; ++i) {
-      img[i].x = bcg_img[i] + cov_scale*cov_img[i];
-      img[i].y = bcg_img[i] + ref_scale*ref_img[i];
-      img[i].z = bcg_img[i] + (index == i ? 1.0f : 0.0f);
+   #pragma omp parallel for schedule(dynamic, 1)
+   for(int i=0; i<width; ++i) {
+      for(int j=0; j<height; ++j) {
+         int id = i + j*width;
+         int di = i + (height-j)*width;
+
+         bool filter = ((abs(j-x)-4 < 0 && i==y) || (abs(i-y)-4 < 0 && j==x)) &&
+                       (generateReference || generateCovariance);
+
+         // Background img
+         img[id] = (displayBackground) ? bcg_img[di]*Vector(1,1,1) : Vector(0,0,0);
+
+         // Adding the filters
+         img[id].x += generateCovariance ? cov_scale*cov_img[di] : 0.0f;
+         img[id].y += generateReference  ? ref_scale*ref_img[di] : 0.0f;
+         img[id].z += (filter ? 1.0f : 0.0f);
+      }
    }
 
    int ret = SaveEXR(img, width, height, "output.exr");
@@ -103,26 +117,28 @@ void KeyboardKeys(unsigned char key, int x, int y) {
 
 void RadianceTexture() {
 
-   const float dx = dist(gen);
-   const float dy = dist(gen);
-
    // Loop over the rows and columns of the image and evaluate radiance and
    // covariance per pixel using Monte-Carlo.
    #pragma omp parallel for schedule(dynamic, 1)
    for (int y=0; y<height; y++){
-      for (int x=0; x<width; x++) {
+      Random rng(y + height*clock());
 
+      for (int x=0; x<width; x++) {
          int i=(width-x-1)*height+y;
-         float _r = 0.0f;
+
+         // Create the RNG and get the sub-pixel sample
+         float dx = rng();
+         float dy = rng();
+
          // Generate the pixel direction
          Vector d = cx*((dx + x)/float(width)  - .5) +
                     cy*((dy + y)/float(height) - .5) + cam.d;
          d.Normalize();
 
          Ray ray(cam.o, d);
-         Vector radiance = Radiance(spheres, ray, 0, 1);
+         Vector radiance = Radiance(spheres, ray, rng, 0, 1);
 
-         bcg_img[i] = (float(nPasses)*bcg_img[i] + radiance.x) / float(nPasses+1);
+         bcg_img[i] = (float(nPasses)*bcg_img[i] + Vector::Dot(radiance, Vector(1,1,1))/3.0f) / float(nPasses+1);
       }
    }
 
@@ -212,8 +228,6 @@ void CovarianceTexture() {
    // Generate a covariance matrix at the sampling position
    int x = width*mouse.X, y = height*mouse.Y;
    const auto t = (cx*((x+0.5)/double(width) - .5) + cy*((y+0.5)/double(height) - .5) + cam.d).Normalize();
-   const auto u = (ncx - Vector::Dot(t, ncx)*t).Normalize();
-   const auto v = (ncy - Vector::Dot(t, ncy)*t).Normalize();
    const auto pixelCov = Cov4D({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 1.0E5, 0.0, 0.0, 0.0, 1.0E5 }, t);
 
    sout.str("");
@@ -264,7 +278,7 @@ void CovarianceTexture() {
 
 using PosFilter = std::pair<Vector, Vector>;
 
-PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
+PosFilter indirect_filter(const Ray &r, Random& rng, int depth, int maxdepth=2){
    double t;                               // distance to Intersection
    int id=0;                               // id of Intersected object
    if (!Intersect(spheres, r, t, id)) return PosFilter(Vector(), Vector()); // if miss, return black
@@ -273,9 +287,6 @@ PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
    Vector x  = r.o+r.d*t,
           n  = (x-obj.c).Normalize(),
           nl = Vector::Dot(n,r.d) < 0 ? n:n*-1;
-
-   /* Local Frame at the surface of the object */
-   Vector w = nl;
 
    // Once you reach the max depth, return the hit position and the filter's
    // value using the recursive form.
@@ -288,16 +299,16 @@ PosFilter indirect_filter(const Ray &r, int depth, int maxdepth=2){
    } else {
       /* Sampling a new direction + recursive call */
       double pdf;
-      const auto e   = Vector(dist(gen), dist(gen), dist(gen));
+      const auto e   = Vector(rng(), rng(), rng());
       const auto wo  = -r.d;
       const auto wi  = mat.Sample(wo, nl, e, pdf);
             auto f   = Vector::Dot(wi, nl)*mat.Reflectance(wi, wo, nl);
-      const auto res = indirect_filter(Ray(x, wi), depth+1, maxdepth);
+      const auto res = indirect_filter(Ray(x, wi), rng, depth+1, maxdepth);
       return PosFilter(res.first, (1.f/pdf) * f.Multiply(res.second));
    }
 }
 
-void BruteForceTexture(int samps = 100) {
+void BruteForceTexture(int samps = 1000) {
 
    std::vector<PosFilter> _filter_elems;
 
@@ -310,32 +321,28 @@ void BruteForceTexture(int samps = 100) {
    }
 
    // Sub pixel sampling
+   const int nthread = std::thread::hardware_concurrency();
    #pragma omp parallel for schedule(dynamic, 1)
-   for (int s=0; s<samps; s++){
+   for(int t=0; t<nthread; ++t) {
+      Random rng(t + nthread*clock());
 
-      // Generate a sub-pixel random position to perform super sampling.
-      double dx=dist(gen);
-      double dy=dist(gen);
+      for(int s=0; s<samps/nthread; s++){
 
-      // Generate the pixel direction
-      Vector d = cx*((dx + x)/width  - .5) +
-                 cy*((dy + y)/height - .5) + cam.d;
-      d.Normalize();
+         // Create the RNG and get the sub-pixel sample
+         float dx = rng();
+         float dy = rng();
 
-      // Covariance tracing requires to know the pixel frame in order to
-      // align the orientation of the covariance matrix with respect to
-      // the image plane. (cx, cy, d) is not a proper frame and we need
-      // to correct it.
-      const Vector px = (cx - Vector::Dot(d, cx)*d).Normalize(),
-                   py = (cy - Vector::Dot(d, cy)*d).Normalize();
-      const double scaleX = Vector::Norm(cx) / double(width),
-                   scaleY = Vector::Norm(cy) / double(height);
+         // Generate the pixel direction
+         Vector d = cx*((dx + x)/width  - .5) +
+            cy*((dy + y)/height - .5) + cam.d;
+         d.Normalize();
 
-      // Evaluate the Covariance and Radiance at the pixel location
-      const auto filter = indirect_filter(Ray(cam.o, d), 0, 1);
-      #pragma omp critical
-      {
-        _filter_elems.push_back(filter);
+         // Evaluate the Covariance and Radiance at the pixel location
+         const auto filter = indirect_filter(Ray(cam.o, d), rng, 0, 1);
+         #pragma omp critical
+         {
+            _filter_elems.push_back(filter);
+         }
       }
    }
 

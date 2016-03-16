@@ -290,13 +290,10 @@ namespace Covariance {
       // 'sv' the sigma v of the inverse angular signal's covariance matrix.
       inline void ProductUV(Float su, Float sv) {
 
-         if(su == sv == 0.0) {
+         if(su == 0.0 && sv == 0.0) {
             return;
          }
 
-         const Float cov_xx = matrix[0];
-         const Float cov_xy = matrix[1];
-         const Float cov_yy = matrix[2];
          const Float cov_xu = matrix[3];
          const Float cov_yu = matrix[4];
          const Float cov_uu = matrix[5];
@@ -357,9 +354,6 @@ namespace Covariance {
       /* Compute the spatial filter in primal space. This resumes to computing
        * the inverse of the spatial submatrix from the inverse covariance
        * matrix in frequency space.
-       *
-       * TODO: There is a missing factor here. The predicted filters are way
-       * too big right now.
        */
       void SpatialFilter(Float& sxx, Float& sxy, Float& syy) const {
 

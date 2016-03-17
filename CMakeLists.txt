@@ -4,10 +4,10 @@ project (CovarianceTracing CXX)
 # For debug build
 set(CMAKE_BUILD_TYPE RELEASE)
 
-if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
-   add_definitions ("-Wall -pedantic  -Wno-deprecated -Wno-deprecated-declarations")
-   add_definitions ("-Ofast -ffast-math -fopenmp")
-endif ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
+#if ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
+#   add_definitions ("-Wall -pedantic  -Wno-deprecated -Wno-deprecated-declarations")
+#   add_definitions ("-Ofast -ffast-math -fopenmp")
+#endif ( CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
 
 include_directories ("include" "modules" ".")
 

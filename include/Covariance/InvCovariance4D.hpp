@@ -57,7 +57,8 @@ namespace Covariance {
        * 'd' distance of travel along the central ray
        */
       inline void Travel(Float d) {
-         ShearAngleSpace(-d, -d);
+         //ShearAngleSpace(-d, -d);
+         ShearSpaceAngle(-d, -d);
       }
 
       /* Curvature operator
@@ -66,7 +67,8 @@ namespace Covariance {
        * 'ky' curvature along the Y direction
        */
       inline void Curvature(Float kx, Float ky) {
-         ShearSpaceAngle(-kx, -ky);
+         ShearAngleSpace(-kx, -ky);
+         //ShearSpaceAngle(-kx, -ky);
       }
 
       /* Cosine operator
@@ -315,7 +317,7 @@ namespace Covariance {
 
          // The outgoing filter is the inverse submatrix of this inverse
          // matrix.
-         Float det = pow(2.0*M_PI,2) * (matrix[0]*matrix[2]-matrix[1]*matrix[1]);
+         Float det = (matrix[0]*matrix[2]-matrix[1]*matrix[1]) / pow(2.0*M_PI,2);
          if(det > 0.0) {
             sxx =  matrix[2] / det;
             syy =  matrix[0] / det;
@@ -358,10 +360,10 @@ namespace Covariance {
                     0.0f, 0.0f, 0.0f, INVCOV_MAX_FLOAT};
       }
       InvCovariance4D(Float sxx, Float syy, Float suu, Float svv) {
-         matrix = { 1.0/(syy*suu*svv),
-                    0.0f,  1.0/(sxx*suu*svv),
-                    0.0f, 0.0f,  1.0/(sxx*syy*svv),
-                    0.0f, 0.0f, 0.0f,  1.0/(sxx*syy*suu)};
+         matrix = { 1.0/std::max<Float>(sxx, INVCOV_MIN_FLOAT),
+                    0.0f,  1.0/std::max<Float>(syy, INVCOV_MIN_FLOAT),
+                    0.0f, 0.0f,  1.0/std::max<Float>(suu, INVCOV_MIN_FLOAT),
+                    0.0f, 0.0f, 0.0f,  1.0/std::max<Float>(svv, INVCOV_MIN_FLOAT)};
       }
       InvCovariance4D(std::array<Float, 10> matrix, const Vector& z) :
          matrix(matrix), z(z) {

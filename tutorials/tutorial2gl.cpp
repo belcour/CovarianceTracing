@@ -228,10 +228,10 @@ void CovarianceTexture() {
    // Generate a covariance matrix at the sampling position
    int x = width*mouse.X, y = height*mouse.Y;
    const auto t = (cx*((x+0.5)/double(width) - .5) + cy*((y+0.5)/double(height) - .5) + cam.d).Normalize();
-   //*/
+   /*/
    const auto pixelCov = Cov4D({ 1.0E+5, 0.0, 1.0E+5, 0.0, 0.0, 1.0E+5, 0.0, 0.0, 0.0, 1.0E+5 }, t);
    /*/
-   const auto pixelCov = Cov4D({ 1.0E-15, 0.0, 1.0E-15, 0.0, 0.0, 1.0E-15, 0.0, 0.0, 0.0, 1.0E-15 }, t);
+   const auto pixelCov = Cov4D({ 1.0E-5, 0.0, 1.0E-5, 0.0, 0.0, 1.0E-5, 0.0, 0.0, 0.0, 1.0E-5 }, t);
    //*/
    sout.str("");
    const auto surfCov  = CovarianceFilter(spheres, Ray(cam.o, t), pixelCov, 0, 1, sout);

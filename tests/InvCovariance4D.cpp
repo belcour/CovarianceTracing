@@ -4,6 +4,7 @@
 #include <cmath>
 
 // Covariance includes
+#include <Covariance/Covariance4D.hpp>
 #include <Covariance/InvCovariance4D.hpp>
 using namespace Covariance;
 
@@ -63,16 +64,16 @@ struct Vector {
 
 using Cov = InvCovariance4D<Vector, double>;
 
-bool IsApprox(const Cov& A, const Cov& B, double Eps=1.0E-3) {
-   bool IsApprox = true;
-   for(int i=0; i<10; ++i) {
-      IsApprox &= std::abs(A.matrix[i] - B.matrix[i]) < Eps;
-   }
-   return IsApprox;
+bool IsApprox(double a, double b, double Eps=1.0E-3) {
+   return std::abs(a - b) < Eps*std::max(0.5*(a+b), 1.0);
 }
 
-bool IsApprox(double a, double b, double Eps=1.0E-3) {
-   return std::abs(a - b) < Eps;
+bool IsApprox(const Cov& A, const Cov& B, double Eps=1.0E-3) {
+   bool isApprox = true;
+   for(int i=0; i<10; ++i) {
+      isApprox &= IsApprox(A.matrix[i], B.matrix[i], Eps);
+   }
+   return isApprox;
 }
 
 std::ostream& operator<<(std::ostream& out, const Cov& A) {

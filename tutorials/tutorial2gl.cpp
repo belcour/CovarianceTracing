@@ -170,8 +170,8 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
    out << "Volume = " << cov2.Volume() << std::endl;
    out << std::endl;
 
+   out << "After projection, cos=" << Vector::Dot(n, cov2.z) << std::endl;
    cov2.Projection(n);
-   out << "After projection" << std::endl;
    out << cov2 << std::endl;
    out << "Volume = " << cov2.Volume() << std::endl;
    out << std::endl;
@@ -203,19 +203,19 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
 
       const double rho = mat.exponent / (4*M_PI*M_PI);
       cov2.Reflection(rho, rho);
-      out << "After BRDF convolution of sigma=" << rho << std::endl;
+      out << "After BRDF convolution, sigma=" << rho << std::endl;
       out << cov2 << std::endl;
       out << "Volume = " << cov2.Volume() << std::endl;
       out << std::endl;
 
       cov2.Curvature(-k, -k);
-      out << "After inverse curvature" << std::endl;
+      out << "After inverse curvature, k=" << -k << std::endl;
       out << cov2 << std::endl;
       out << "Volume = " << cov2.Volume() << std::endl;
       out << std::endl;
 
       cov2.InverseProjection(wr);
-      out << "After inverse projection" << std::endl;
+      out << "After inverse projection, cos=" << Vector::Dot(n, wr) << std::endl;
       out << cov2 << std::endl;
       out << "Volume = " << cov2.Volume() << std::endl;
       out << std::endl;
@@ -228,8 +228,11 @@ void CovarianceTexture() {
    // Generate a covariance matrix at the sampling position
    int x = width*mouse.X, y = height*mouse.Y;
    const auto t = (cx*((x+0.5)/double(width) - .5) + cy*((y+0.5)/double(height) - .5) + cam.d).Normalize();
-   const auto pixelCov = Cov4D({ 1.0E5, 0.0, 1.0E5, 0.0, 0.0, 1.0E5, 0.0, 0.0, 0.0, 1.0E5 }, t);
-
+   //*/
+   const auto pixelCov = Cov4D({ 1.0E+5, 0.0, 1.0E+5, 0.0, 0.0, 1.0E+5, 0.0, 0.0, 0.0, 1.0E+5 }, t);
+   /*/
+   const auto pixelCov = Cov4D({ 1.0E-15, 0.0, 1.0E-15, 0.0, 0.0, 1.0E-15, 0.0, 0.0, 0.0, 1.0E-15 }, t);
+   //*/
    sout.str("");
    const auto surfCov  = CovarianceFilter(spheres, Ray(cam.o, t), pixelCov, 0, 1, sout);
    sout << surfCov.second << std::endl;
@@ -239,12 +242,12 @@ void CovarianceTexture() {
    double sxx = 0, syy = 0, sxy = 0;
    try {
       surfCov.second.SpatialFilter(sxx, sxy, syy);
+      sout << "Spatial filter = [" << sxx << "," << sxy << "; " << sxy << ", " << syy << "]"<< std::endl;
    } catch (...) {
       std::cout << "Error: incorrect spatial filter" << std::endl;
       sout << surfCov.second << std::endl;
       return;
    }
-   //std::cout << "Filter = [" << sxx << ", " << sxy << ", " << syy << "]" << std::endl;
 
    // Loop over the rows and columns of the image and evaluate radiance and
    // covariance per pixel using Monte-Carlo.

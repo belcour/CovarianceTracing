@@ -11,6 +11,8 @@
 #define COV_MAX_FLOAT 1.0E+5
 #define COV_MIN_FLOAT 1.0E-5
 
+#define USE_WOODBURY_IDENTITY
+
 namespace Covariance {
 
    /* The 4D version of Covariance Tracing.
@@ -293,7 +295,8 @@ namespace Covariance {
          if(su == 0.0 && sv == 0.0) {
             return;
          }
-
+         
+#ifdef USE_WOODBURY_IDENTITY
          const Float cov_xu = matrix[3];
          const Float cov_yu = matrix[4];
          const Float cov_uu = matrix[5];
@@ -332,6 +335,41 @@ namespace Covariance {
                           cov_vv*(sig_u*cov_uv-cov_uv*cov_uu));
          matrix[9] -=  g*(cov_uv*(sig_v*cov_uv-cov_uv*cov_vv) +
                           cov_vv*(sig_u*cov_vv-cov_uv*cov_uv));
+#else
+         // This method computes the inverse of the covariance matrix
+         // explicitely, adds the inverse of the BRDF matrix to the
+         // angular component, and then invert the matrix again to obtain
+         // the covariance matrix. This is very slow method to check 
+         // the Woodbury formula.
+
+         Float inverse[16];
+         inverse[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
+         inverse[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
+         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
+         inverse[10] = matrix[ 5] + COV_MIN_FLOAT;
+         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
+         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
+         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
+         inverse[15] = matrix[ 9] + COV_MIN_FLOAT;
+
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+         inverse[10] += 1.0f/std::max<Float>(sv, COV_MIN_FLOAT);
+         inverse[15] += 1.0f/std::max<Float>(su, COV_MIN_FLOAT);
+         
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+         matrix[ 0] = inverse[ 0];
+         matrix[ 1] = inverse[ 1];
+         matrix[ 2] = inverse[ 5];
+         matrix[ 3] = inverse[ 2];
+         matrix[ 4] = inverse[ 6];
+         matrix[ 5] = inverse[10];
+         matrix[ 6] = inverse[ 3];
+         matrix[ 7] = inverse[ 7];
+         matrix[ 8] = inverse[11];
+         matrix[ 9] = inverse[15];
+#endif
       }
 
       /////////////////////////////

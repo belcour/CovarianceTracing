@@ -282,9 +282,14 @@ Vector Radiance(const std::vector<Sphere>& spheres,
 }
 
 // Covariance Tracing includes
+//*
 #include <Covariance/Covariance4D.hpp>
-using Cov4D  = Covariance::Covariance4D<Vector, double>;
-using PosCov = std::pair<Vector, Cov4D>;
+using Cov4D   = Covariance::Covariance4D<Vector, double>;
+/*/
+#include <Covariance/InvCovariance4D.hpp>
+using Cov4D  = Covariance::InvCovariance4D<Vector, double>;
+//*/
+using PosCov  = std::pair<Vector, Cov4D>;
 
 std::ostream& operator<<(std::ostream& out, const Cov4D& cov) {
    out << std::scientific << std::showpos;

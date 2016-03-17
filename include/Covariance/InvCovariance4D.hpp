@@ -8,8 +8,8 @@
 // Local includes
 #include "Matrix.hpp"
 
-#define COV_MAX_FLOAT 1.0E+5
-#define COV_MIN_FLOAT 1.0E-5
+#define INVCOV_MAX_FLOAT 1.0E+10
+#define INVCOV_MIN_FLOAT 1.0E-10
 
 namespace Covariance {
 
@@ -57,7 +57,7 @@ namespace Covariance {
        * 'd' distance of travel along the central ray
        */
       inline void Travel(Float d) {
-         ShearAngleSpace(d, d);
+         ShearAngleSpace(-d, -d);
       }
 
       /* Curvature operator
@@ -66,7 +66,7 @@ namespace Covariance {
        * 'ky' curvature along the Y direction
        */
       inline void Curvature(Float kx, Float ky) {
-         ShearSpaceAngle(kx, ky);
+         ShearSpaceAngle(-kx, -ky);
       }
 
       /* Cosine operator
@@ -84,9 +84,8 @@ namespace Covariance {
        * 'svv' the covariance of the BRDF along the Y axis.
        */
       inline void Reflection(Float suu, Float svv) {
-         if(suu < COV_MAX_FLOAT && svv < COV_MAX_FLOAT) {
-            ProductUV(fmax(suu, COV_MIN_FLOAT), fmax(svv, COV_MIN_FLOAT));
-         }
+         matrix[5] += 1.0f/std::max<Float>(svv, INVCOV_MIN_FLOAT);
+         matrix[9] += 1.0f/std::max<Float>(suu, INVCOV_MIN_FLOAT);
       }
 
 
@@ -101,7 +100,6 @@ namespace Covariance {
        * 'n' the surface normal.
        */
       inline void Projection(const Vector& n) {
-
          const auto cx = Vector::Dot(x, n);
          const auto cy = Vector::Dot(y, n);
 
@@ -113,7 +111,7 @@ namespace Covariance {
          // Scale the componnent that project by the cosine of the ray direction
          // and the normal.
          const Float cosine = Vector::Dot(z, n);
-         ScaleY(1.0/fmax(fabs(cosine), COV_MIN_FLOAT));
+         ScaleY(1.0/fmax(fabs(cosine), INVCOV_MIN_FLOAT));
 
          // Update direction vectors.
          x = c*x + s*y;
@@ -207,26 +205,26 @@ namespace Covariance {
       // \param cx amount of shear along the x direction.
       // \param cy amount of shear along the y direction.
       inline void ShearSpaceAngle(Float cx, Float cy) {
-         matrix[0] += (matrix[5]*cx + 2*matrix[3])*cx;
-         matrix[1] +=  matrix[8]*cx*cy + (matrix[4]*cy + matrix[6]*cx);
-         matrix[2] += (matrix[9]*cy + 2*matrix[7])*cy;
-         matrix[3] +=  matrix[5]*cx;
-         matrix[4] +=  matrix[8]*cy;
-         matrix[6] +=  matrix[8]*cx;
-         matrix[7] +=  matrix[9]*cy;
+         matrix[0] += (matrix[5]*cx - 2*matrix[3])*cx;
+         matrix[1] +=  matrix[8]*cx*cy - (matrix[4]*cy + matrix[6]*cx);
+         matrix[2] += (matrix[9]*cy - 2*matrix[7])*cy;
+         matrix[3] -=  matrix[5]*cx;
+         matrix[4] -=  matrix[8]*cy;
+         matrix[6] -=  matrix[8]*cx;
+         matrix[7] -=  matrix[9]*cy;
       }
 
       // Shear the angular (U, V) domain by the spatial (X, Y) domain.
       // \param cu amount of shear along the U direction.
       // \param cy amount of shear along the V direction.
       inline void ShearAngleSpace(Float cu, Float cv) {
-         matrix[5] += (matrix[0]*cu + 2*matrix[3])*cu;
-         matrix[3] +=  matrix[0]*cu;
-         matrix[8] +=  matrix[1]*cu*cv + (matrix[4]*cv + matrix[6]*cu);
-         matrix[4] +=  matrix[1]*cv;
-         matrix[6] +=  matrix[1]*cu;
-         matrix[9] += (matrix[2]*cv + 2*matrix[7])*cv;
-         matrix[7] +=  matrix[2]*cv;
+         matrix[5] += (matrix[0]*cu - 2*matrix[3])*cu;
+         matrix[3] -=  matrix[0]*cu;
+         matrix[8] +=  matrix[1]*cu*cv - (matrix[4]*cv + matrix[6]*cu);
+         matrix[4] -=  matrix[1]*cv;
+         matrix[6] -=  matrix[1]*cu;
+         matrix[9] += (matrix[2]*cv - 2*matrix[7])*cv;
+         matrix[7] -=  matrix[2]*cv;
       }
 
 
@@ -317,10 +315,16 @@ namespace Covariance {
 
          // The outgoing filter is the inverse submatrix of this inverse
          // matrix.
-         Float det = (matrix[0]*matrix[2]-matrix[1]*matrix[1]) / pow(2.0*M_PI, 2);
-         sxx =  matrix[2] / det;
-         syy =  matrix[0] / det;
-         sxy = -matrix[1] / det;
+         Float det = pow(2.0*M_PI,2) * (matrix[0]*matrix[2]-matrix[1]*matrix[1]);
+         if(det > 0.0) {
+            sxx =  matrix[2] / det;
+            syy =  matrix[0] / det;
+            sxy = -matrix[1] / det;
+         } else {
+            sxx = INVCOV_MAX_FLOAT;
+            syy = INVCOV_MAX_FLOAT;
+            sxy = 0.0;
+         }
       }
 
       /* Compute the volume (in frequency domain) spanned by the matrix.
@@ -329,18 +333,18 @@ namespace Covariance {
       Float Volume() const {
 
          Float fmatrix[16];
-         fmatrix[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         fmatrix[ 0] = matrix[ 0] + INVCOV_MIN_FLOAT;
          fmatrix[ 1] = matrix[ 1]; fmatrix[ 4] = matrix[ 1];
-         fmatrix[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         fmatrix[ 5] = matrix[ 2] + INVCOV_MIN_FLOAT;
          fmatrix[ 2] = matrix[ 3]; fmatrix[ 8] = matrix[ 3];
          fmatrix[ 6] = matrix[ 4]; fmatrix[ 9] = matrix[ 4];
-         fmatrix[10] = matrix[ 5] + COV_MIN_FLOAT;
+         fmatrix[10] = matrix[ 5] + INVCOV_MIN_FLOAT;
          fmatrix[ 3] = matrix[ 6]; fmatrix[12] = matrix[ 6];
          fmatrix[ 7] = matrix[ 7]; fmatrix[13] = matrix[ 7];
          fmatrix[11] = matrix[ 8]; fmatrix[14] = matrix[ 8];
-         fmatrix[15] = matrix[ 9] + COV_MIN_FLOAT;
+         fmatrix[15] = matrix[ 9] + INVCOV_MIN_FLOAT;
 
-         return Determinant<Float>(fmatrix, 4);
+         return 1.0f/Determinant<Float>(fmatrix, 4);
       }
 
       /////////////////////
@@ -348,10 +352,10 @@ namespace Covariance {
       /////////////////////
 
       InvCovariance4D() {
-         matrix = { COV_MAX_FLOAT,
-                    0.0f, COV_MAX_FLOAT,
-                    0.0f, 0.0f, COV_MAX_FLOAT,
-                    0.0f, 0.0f, 0.0f, COV_MAX_FLOAT};
+         matrix = { INVCOV_MAX_FLOAT,
+                    0.0f, INVCOV_MAX_FLOAT,
+                    0.0f, 0.0f, INVCOV_MAX_FLOAT,
+                    0.0f, 0.0f, 0.0f, INVCOV_MAX_FLOAT};
       }
       InvCovariance4D(Float sxx, Float syy, Float suu, Float svv) {
          matrix = { 1.0/(syy*suu*svv),

@@ -282,7 +282,7 @@ Vector Radiance(const std::vector<Sphere>& spheres,
 }
 
 // Covariance Tracing includes
-/*
+//*
 #include <Covariance/Covariance4D.hpp>
 using Cov4D   = Covariance::Covariance4D<Vector, double>;
 /*/

@@ -1,5 +1,8 @@
 #pragma once
 
+// STL
+#include <cmath>
+
 namespace Covariance {
 
    /* Recursively compute the determinant of the NxN matrix A
@@ -15,15 +18,14 @@ namespace Covariance {
 
          // Calculate the cofactor for the first line
          T det = 0.0f;
+         T* B = new T[NN];
          for(unsigned int i=0; i<N; ++i) {
-            T B[NN];
             unsigned int U=0;
             for(unsigned int u=0; u<N; ++u) {
                if(u == i)
                   continue;
 
                for(unsigned int v=1; v<N; ++v) {
-
                   B[U*(N-1)+v-1] = A[u*N+v];
                }
 
@@ -33,6 +35,7 @@ namespace Covariance {
             det += pow(-1, i) * A[i*N] * recurse_determinant(B, N-1);
          }
 
+         delete[] B;
          return det;
       }
    }
@@ -41,7 +44,7 @@ namespace Covariance {
     */
    template<typename T> T cofactor(T* A, int n, int i, int j) {
       // Create the cofactor
-      T C[(n-1)*(n-1)];
+      T*  C = new T[(n-1)*(n-1)];
       int I = 0;
       int J = 0;
       for(int ii=0; ii<n; ++ii) {
@@ -57,8 +60,11 @@ namespace Covariance {
          }
          ++I;
       }
-
-      return recurse_determinant(C, n-1);
+      
+      T res = recurse_determinant(C, n-1);
+      
+      delete[] C;
+      return res;
    }
 
    /* Calculate the inverse of the matrix A using the cofactor and the inverse
@@ -66,10 +72,11 @@ namespace Covariance {
     * the resulting matrix in place 'A'.
     */
    template<typename T> bool Inverse(T* A, int size) {
-      T B[size*size];
-      T det = recurse_determinant<T>(A, size);
+      T* B   = new T[size*size];
+      T  det = recurse_determinant<T>(A, size);
 
       if(det < T(0.0)) {
+         delete[] B;
          return false;
       }
 
@@ -83,6 +90,7 @@ namespace Covariance {
             A[i*size +j] = B[i*size + j];
          }
 
+      delete[] B;
       return true;
    }
 

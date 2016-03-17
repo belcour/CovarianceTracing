@@ -65,7 +65,6 @@ std::stringstream sout;
 void ExportImage() {
    Vector* img = new Vector[width*height];
    int x = width*mouse.X, y = height*mouse.Y;
-   int index = (width-x-1)*height+y;
    #pragma omp parallel for schedule(dynamic, 1)
    for(int i=0; i<width; ++i) {
       for(int j=0; j<height; ++j) {
@@ -228,7 +227,7 @@ void CovarianceTexture() {
    // Generate a covariance matrix at the sampling position
    int x = width*mouse.X, y = height*mouse.Y;
    const auto t = (cx*((x+0.5)/double(width) - .5) + cy*((y+0.5)/double(height) - .5) + cam.d).Normalize();
-   /*/
+   //*/
    const auto pixelCov = Cov4D({ 1.0E+5, 0.0, 1.0E+5, 0.0, 0.0, 1.0E+5, 0.0, 0.0, 0.0, 1.0E+5 }, t);
    /*/
    const auto pixelCov = Cov4D({ 1.0E-5, 0.0, 1.0E-5, 0.0, 0.0, 1.0E-5, 0.0, 0.0, 0.0, 1.0E-5 }, t);

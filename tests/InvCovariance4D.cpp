@@ -4,7 +4,7 @@
 #include <cmath>
 
 // Covariance includes
-#include <Covariance/Covariance4D.hpp>
+#include <Covariance/InvCovariance4D.hpp>
 using namespace Covariance;
 
 struct Vector {
@@ -61,7 +61,7 @@ struct Vector {
    }
 };
 
-using Cov = Covariance4D<Vector, double>;
+using Cov = InvCovariance4D<Vector, double>;
 
 bool IsApprox(const Cov& A, const Cov& B, double Eps=1.0E-3) {
    bool IsApprox = true;
@@ -367,35 +367,35 @@ int TestVolume() {
    std::cerr.precision(10);
    A.Travel(t);
    vol = A.Volume();
-   if(!IsApprox(vol, 1.0f)) {
+   if(!IsApprox(vol, 1.0)) {
       std::cerr << "Error: the travel operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
       ++nb_fails;
    }
 
    A.Curvature(k, k);
    vol = A.Volume();
-   if(!IsApprox(vol, 1.0f)) {
+   if(!IsApprox(vol, 1.0)) {
       std::cerr << "Error: the curvature operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
       ++nb_fails;
    }
 
    A.Symmetry();
    vol = A.Volume();
-   if(!IsApprox(vol, 1.0f)) {
+   if(!IsApprox(vol, 1.0)) {
       std::cerr << "Error: the symmetry operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
       ++nb_fails;
    }
 
    A.Curvature(-k, -k);
    vol = A.Volume();
-   if(!IsApprox(vol, 1.0f)) {
+   if(!IsApprox(vol, 1.0)) {
       std::cerr << "Error: the inv. curvature operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
       ++nb_fails;
    }
 
    A.Rotate(0.2*M_PI);
    vol = A.Volume();
-   if(!IsApprox(vol, 1.0f)) {
+   if(!IsApprox(vol, 1.0)) {
       std::cerr << "Error: the rotation operator does not conserve volume: " << vol << " ≠ 1" << std::endl;
       ++nb_fails;
    }

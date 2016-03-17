@@ -17,11 +17,14 @@ find_package(OpenGL)
 find_package(GLUT)
 
 # Add main test suite
-add_executable (TestCovariance4D tests/Covariance4D.cpp)
-target_compile_features(TestCovariance4D PRIVATE cxx_range_for)
+add_executable (TestCovariance4D    tests/Covariance4D.cpp)
+add_executable (TestInvCovariance4D tests/InvCovariance4D.cpp)
+target_compile_features(TestCovariance4D    PRIVATE cxx_range_for)
+target_compile_features(TestInvCovariance4D PRIVATE cxx_range_for)
 
 enable_testing()
-add_test(TestCovariance4D TestCovariance4D)
+add_test(TestCovariance4D    TestCovariance4D)
+add_test(TestInvCovariance4D TestInvCovariance4D)
 
 add_executable (SmallCov tutorials/tutorial1.cpp)
 target_compile_features(SmallCov PRIVATE cxx_range_for)

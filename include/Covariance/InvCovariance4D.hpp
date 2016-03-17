@@ -296,13 +296,61 @@ namespace Covariance {
       // Add covariance together //
       /////////////////////////////
 
+      /* Add two covariance matrices together. Since we are using inverse
+       * covariance storage here, we need to invert the matrices before doing
+       * the addition (geometric mean). Using this routine is not recommended,
+       * prefer storing covariances directly using 'Covariance4D' if you need
+       * to perform many additions.
+       */
       void Add(const InvCovariance4D& cov, Float L1=1.0f, Float L2=1.0f) {
          const Float L = L1+L2;
          if(L <= 0.0f) return;
 
-         for(unsigned short i=0; i<10; ++i) {
-            matrix[i] = (L1*matrix[i] + L2*cov.matrix[i]) / L;
+         // Compute the inverse matrix
+         Float inverse[16];
+         inverse[ 0] = matrix[ 0] + INVCOV_MIN_FLOAT;
+         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
+         inverse[ 5] = matrix[ 2] + INVCOV_MIN_FLOAT;
+         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
+         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
+         inverse[10] = matrix[ 5] + INVCOV_MIN_FLOAT;
+         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
+         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
+         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
+         inverse[15] = matrix[ 9] + INVCOV_MIN_FLOAT;
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+         
+         // Compute the inverse of matrix cov.matrix
+         Float inverseB[16];
+         inverseB[ 0] = cov.matrix[ 0] + INVCOV_MIN_FLOAT;
+         inverseB[ 1] = cov.matrix[ 1]; inverse[ 4] = cov.matrix[ 1];
+         inverseB[ 5] = cov.matrix[ 2] + INVCOV_MIN_FLOAT;
+         inverseB[ 2] = cov.matrix[ 3]; inverse[ 8] = cov.matrix[ 3];
+         inverseB[ 6] = cov.matrix[ 4]; inverse[ 9] = cov.matrix[ 4];
+         inverseB[10] = cov.matrix[ 5] + INVCOV_MIN_FLOAT;
+         inverseB[ 3] = cov.matrix[ 6]; inverse[12] = cov.matrix[ 6];
+         inverseB[ 7] = cov.matrix[ 7]; inverse[13] = cov.matrix[ 7];
+         inverseB[11] = cov.matrix[ 8]; inverse[14] = cov.matrix[ 8];
+         inverseB[15] = cov.matrix[ 9] + INVCOV_MIN_FLOAT;
+         if(!Inverse<Float>(inverseB, 4)) { throw 1; }
+
+         // Add the two covariance matrices together
+         for(unsigned short i=0; i<15; ++i) {
+            inverse[i] = (L1*inverse[i] + L2*inverseB[i]) / L;
          }
+         
+         // Get the inverse covariance back
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+         matrix[ 0] = inverse[ 0];
+         matrix[ 1] = inverse[ 1];
+         matrix[ 2] = inverse[ 5];
+         matrix[ 3] = inverse[ 2];
+         matrix[ 4] = inverse[ 6];
+         matrix[ 5] = inverse[10];
+         matrix[ 6] = inverse[ 3];
+         matrix[ 7] = inverse[ 7];
+         matrix[ 8] = inverse[11];
+         matrix[ 9] = inverse[15];
       }
 
       /////////////////////

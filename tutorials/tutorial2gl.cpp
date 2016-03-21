@@ -543,6 +543,7 @@ void PrintHelp() {
    std::cout << " + 'B' brute-force indirect pixel filter (SLOW)" << std::endl;
    std::cout << " + 'p' output image to EXR file" << std::endl;
    std::cout << " + 'd' print Covariance Tracing step by step" << std::endl;
+   std::cout << " + 'f' switch between displaying the Gaussian filter or the polygonal footprint" << std::endl;
    std::cout << " + '+' increase the BRDF exponent for the right sphere" << std::endl;
    std::cout << " + '-' decrease the BRDF exponent for the right sphere" << std::endl;
    std::cout << std::endl;

@@ -32,7 +32,6 @@ add_executable (CovFiltering tutorials/tutorial2.cpp)
 target_compile_features(CovFiltering PRIVATE cxx_range_for)
 
 if(OPENGL_FOUND AND GLUT_FOUND)
-   message("${OPENGL_INCLUDE_DIR}/Headers")
    add_definitions("-DGL_GLEXT_PROTOTYPES")
    include_directories("${OPENGL_INCLUDE_DIR}/Headers" ${GLUT_INCLUDE_DIR})
    add_executable(CovFilteringGL tutorials/tutorial2gl.cpp)

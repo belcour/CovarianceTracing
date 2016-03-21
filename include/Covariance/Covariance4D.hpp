@@ -295,7 +295,7 @@ namespace Covariance {
          if(su == 0.0 && sv == 0.0) {
             return;
          }
-         
+
 #ifdef USE_WOODBURY_IDENTITY
          const Float cov_xu = matrix[3];
          const Float cov_yu = matrix[4];
@@ -339,7 +339,7 @@ namespace Covariance {
          // This method computes the inverse of the covariance matrix
          // explicitely, adds the inverse of the BRDF matrix to the
          // angular component, and then invert the matrix again to obtain
-         // the covariance matrix. This is very slow method to check 
+         // the covariance matrix. This is very slow method to check
          // the Woodbury formula.
 
          Float inverse[16];
@@ -357,7 +357,7 @@ namespace Covariance {
          if(!Inverse<Float>(inverse, 4)) { throw 1; }
          inverse[10] += 1.0f/std::max<Float>(sv, COV_MIN_FLOAT);
          inverse[15] += 1.0f/std::max<Float>(su, COV_MIN_FLOAT);
-         
+
          if(!Inverse<Float>(inverse, 4)) { throw 1; }
          matrix[ 0] = inverse[ 0];
          matrix[ 1] = inverse[ 1];
@@ -417,6 +417,70 @@ namespace Covariance {
          sxx =  inverse[5] / det;
          syy =  inverse[0] / det;
          sxy = -inverse[1] / det;
+      }
+
+      /* Compute the spatial extent of the space related to the equivalent
+         spatial filter to the covariance matrix. The extent is provided as
+         'Dx' and 'Dy', the main axis of the filter's fooprint.
+
+         'Dx' and 'Dy' are express using the first two components:
+                Dx = [x, y, 0]
+          as they represent direction in the local frame x,y.
+
+          To extract Dx and Dy, we do an eigen-decomposition of the
+          covariance matrix and use the normalized eigen-vectors as the
+          axis of the extent and the eigen-values are the squared extent
+          of the polygonal shape.
+       */
+      void SpatialExtent(Vector& Dx, Vector& Dy) const {
+         // Compute the inverse matrix. We need to add an epsilon to the
+         // diagonal in order to ensure that the matrix can be inverted.
+         Float inverse[16];
+         inverse[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
+         inverse[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
+         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
+         inverse[10] = matrix[ 5] + COV_MIN_FLOAT;
+         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
+         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
+         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
+         inverse[15] = matrix[ 9] + COV_MIN_FLOAT;
+
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+
+          // T = trace and D = det of the spatial submatrix
+          Float T = inverse[0]+inverse[5];
+          Float D = inverse[0]*inverse[5] - inverse[1]*inverse[1];
+
+          // Solve the 2nd order polynomial roots of p(l) = l^2 - l T + D.
+          // This gives us the eigen values.
+          Float d  = 0.25*T*T - D;
+          if(d < 0.0) { throw 1; } // No solution exists
+          Float l1 = 0.5*T + sqrt(d);
+          Float l2 = 0.5*T - sqrt(d);
+
+          if(abs(inverse[1]) > COV_MIN_FLOAT) {
+            Dx.x = l1 - inverse[5];
+            Dx.y = inverse[1];
+            Dx.z = 0.0;
+            Dy.x = l2 - inverse[5];
+            Dy.y = inverse[1];
+            Dy.z = 0.0;
+
+            Dx.Normalize();
+            Dy.Normalize();
+
+            Dx = sqrt(l1)/(2.0*M_PI) * Dx;
+            Dy = sqrt(l2)/(2.0*M_PI) * Dy;
+          } else {
+            Dx.x = sqrt(inverse[0])/(2.0*M_PI);
+            Dx.y = 0.0;
+            Dx.z = 0.0;
+            Dy.x = 0.0;
+            Dy.y = sqrt(inverse[5])/(2.0*M_PI);
+            Dy.z = 0.0;
+          }
       }
 
       /* Compute the volume (in frequency domain) spanned by the matrix.

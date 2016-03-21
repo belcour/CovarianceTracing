@@ -38,6 +38,7 @@ int   width = 512, height = 512;
 bool  generateBackground = true;
 bool  displayBackground  = true;
 bool  generateCovariance = true;
+bool  useCovFilter       = true;
 bool  generateReference  = false;
 int   nPasses            = 0;
 int   nPassesFilter      = 0;
@@ -98,6 +99,8 @@ void KeyboardKeys(unsigned char key, int x, int y) {
       generateBackground = !generateBackground;
    } else if(key == 'h') {
       displayBackground  = !displayBackground;
+   } else if(key == 'f') {
+       useCovFilter = !useCovFilter;
    } else if(key == '+') {
       Material phong(Vector(), Vector(), Vector(1,1,1)*.999, spheres[1].mat.exponent * 10);
       spheres[1].mat = phong;
@@ -239,9 +242,13 @@ void CovarianceTexture() {
    sout << std::endl;
 
    double sxx = 0, syy = 0, sxy = 0;
+   Vector Dx, Dy;
    try {
       surfCov.second.SpatialFilter(sxx, sxy, syy);
+      surfCov.second.SpatialExtent(Dx, Dy);
       sout << "Spatial filter = [" << sxx << "," << sxy << "; " << sxy << ", " << syy << "]"<< std::endl;
+      sout << "Extent = " << Dx << ", " << Dy << std::endl;
+      sout << "|Dx| = " << Vector::Norm(Dx) << ", |Dy| = " << Vector::Norm(Dy) << std::endl;
    } catch (...) {
       std::cout << "Error: incorrect spatial filter" << std::endl;
       sout << surfCov.second << std::endl;
@@ -268,12 +275,17 @@ void CovarianceTexture() {
 
          // Evaluate the covariance
          const Vector dx  = surfCov.first - hitp;
-         const double du  = Vector::Dot(dx, surfCov.second.x);
-         const double dv  = Vector::Dot(dx, surfCov.second.y);
-         const double dt  = Vector::Dot(dx, surfCov.second.z);
+         const Vector dU = Vector(Vector::Dot(dx, surfCov.second.x), Vector::Dot(dx, surfCov.second.y), Vector::Dot(dx, surfCov.second.z));
+         if(useCovFilter) {
+            double bf = dU.x*dU.x*sxx + dU.y*dU.y*syy + 2*dU.x*dU.y*sxy;
+            cov_img[i] = exp(-10.0*dU.z*dU.z) * exp(- 0.5* bf);
+         } else {
 
-         double bf = du*du*sxx + dv*dv*syy + 2*du*dv*sxy;
-         cov_img[i] = exp(-10.0*dt*dt) * exp(- 0.5* bf);
+            const double du  = Vector::Dot(dU, Dx) / Vector::Norm(Dx);
+            const double dv  = Vector::Dot(dU, Dy) / Vector::Norm(Dy);
+            cov_img[i] = (abs(du) < Vector::Norm(Dx) &&
+                          abs(dv) < Vector::Norm(Dy)) ? exp(-10.0*dU.z*dU.z) : 0.0;
+         }
       }
    }
 }

@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <complex>
 
 // Local includes
 #include "Matrix.hpp"
@@ -319,7 +320,7 @@ namespace Covariance {
          inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
          inverse[15] = matrix[ 9] + INVCOV_MIN_FLOAT;
          if(!Inverse<Float>(inverse, 4)) { throw 1; }
-         
+
          // Compute the inverse of matrix cov.matrix
          Float inverseB[16];
          inverseB[ 0] = cov.matrix[ 0] + INVCOV_MIN_FLOAT;
@@ -338,7 +339,7 @@ namespace Covariance {
          for(unsigned short i=0; i<15; ++i) {
             inverse[i] = (L1*inverse[i] + L2*inverseB[i]) / L;
          }
-         
+
          // Get the inverse covariance back
          if(!Inverse<Float>(inverse, 4)) { throw 1; }
          matrix[ 0] = inverse[ 0];
@@ -357,9 +358,13 @@ namespace Covariance {
       // Spatial Filters //
       /////////////////////
 
-      /* Compute the spatial filter in primal space. This resumes to computing
-       * the inverse of the spatial submatrix from the inverse covariance
-       * matrix in frequency space.
+      /* Compute the spatial filter in primal space. The spatial filter is
+       * the 2D Gaussian parameters 'sxx', 'sxy', 'syy' such that the filter
+       * is written as:
+       *        f(u,v) = exp(- 0.5 (sxx u^2 + 2 sxy u v + syy v^2))
+       *
+       * This resumes to computing the inverse of the spatial submatrix from
+       * the inverse covariance matrix in frequency space.
        */
       void SpatialFilter(Float& sxx, Float& sxy, Float& syy) const {
 
@@ -375,6 +380,54 @@ namespace Covariance {
             syy = INVCOV_MAX_FLOAT;
             sxy = 0.0;
          }
+      }
+
+      /* Compute the spatial extent of the space related to the equivalent
+         spatial filter to the covariance matrix. The extent is provided as
+         'Dx' and 'Dy', the main axis of the filter's fooprint.
+
+         'Dx' and 'Dy' are express using the first two components:
+                Dx = [x, y, 0]
+          as they represent direction in the local frame x,y.
+
+          To extract Dx and Dy, we do an eigen-decomposition of the
+          covariance matrix and use the normalized eigen-vectors as the
+          axis of the extent and the eigen-values are the squared extent
+          of the polygonal shape.
+       */
+      void SpatialExtent(Vector& Dx, Vector& Dy) const {
+          // T = trace and D = det of the spatial submatrix
+          Float T = matrix[0]+matrix[2];
+          Float D = matrix[0]*matrix[2] - matrix[1]*matrix[1];
+
+          // Solve the 2nd order polynomial roots of p(l) = l^2 - l T + D.
+          // This gives us the eigen values.
+          Float d  = 0.25*T*T - D;
+          if(d < 0.0) { throw 1; } // No solution exists
+          Float l1 = 0.5*T + sqrt(d);
+          Float l2 = 0.5*T - sqrt(d);
+
+          if(abs(matrix[1]) > INVCOV_MIN_FLOAT) {
+            Dx.x = l1 - matrix[2];
+            Dx.y = matrix[1];
+            Dx.z = 0.0;
+            Dy.x = l2 - matrix[2];
+            Dy.y = matrix[1];
+            Dy.z = 0.0;
+
+            Dx.Normalize();
+            Dy.Normalize();
+
+            Dx = sqrt(l1)/(2.0*M_PI) * Dx;
+            Dy = sqrt(l2)/(2.0*M_PI) * Dy;
+          } else {
+            Dx.x = sqrt(matrix[0])/(2.0*M_PI);
+            Dx.y = 0.0;
+            Dx.z = 0.0;
+            Dy.x = 0.0;
+            Dy.y = sqrt(matrix[2])/(2.0*M_PI);
+            Dy.z = 0.0;
+          }
       }
 
       /* Compute the volume (in frequency domain) spanned by the matrix.

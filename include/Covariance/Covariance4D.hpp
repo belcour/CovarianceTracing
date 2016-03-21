@@ -483,6 +483,70 @@ namespace Covariance {
           }
       }
 
+      /* Compute the angular extent of the angular component of the equivalent
+         spatial filter to the covariance matrix. The extent is provided as
+         'Du' and 'Dv', the main axis of the filter's fooprint.
+
+         'Du' and 'Dv' are express using the first two components:
+                Du = [u, v, 0]
+          as they represent direction in the local frame x,y.
+
+          To extract Du and Dv, we do an eigen-decomposition of the
+          covariance matrix and use the normalized eigen-vectors as the
+          axis of the extent and the eigen-values are the squared extent
+          of the polygonal shape.
+       */
+      void AngularExtent(Vector& Du, Vector& Dv) const {
+         // Compute the inverse matrix. We need to add an epsilon to the
+         // diagonal in order to ensure that the matrix can be inverted.
+         Float inverse[16];
+         inverse[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
+         inverse[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
+         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
+         inverse[10] = matrix[ 5] + COV_MIN_FLOAT;
+         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
+         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
+         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
+         inverse[15] = matrix[ 9] + COV_MIN_FLOAT;
+
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+
+          // T = trace and D = det of the spatial submatrix
+          Float T = inverse[10]+inverse[15];
+          Float D = inverse[10]*inverse[15] - inverse[11]*inverse[11];
+
+          // Solve the 2nd order polynomial roots of p(l) = l^2 - l T + D.
+          // This gives us the eigen values.
+          Float d  = 0.25*T*T - D;
+          if(d < 0.0) { throw 1; } // No solution exists
+          Float l1 = 0.5*T + sqrt(d);
+          Float l2 = 0.5*T - sqrt(d);
+
+          if(abs(inverse[11]) > COV_MIN_FLOAT) {
+            Du.x = l1 - inverse[15];
+            Du.y = inverse[11];
+            Du.z = 0.0;
+            Dv.x = l2 - inverse[15];
+            Dv.y = inverse[11];
+            Dv.z = 0.0;
+
+            Du.Normalize();
+            Dv.Normalize();
+
+            Du = sqrt(l1)/(2.0*M_PI) * Du;
+            Dv = sqrt(l2)/(2.0*M_PI) * Dv;
+          } else {
+            Du.x = sqrt(inverse[10])/(2.0*M_PI);
+            Du.y = 0.0;
+            Du.z = 0.0;
+            Dv.x = 0.0;
+            Dv.y = sqrt(inverse[15])/(2.0*M_PI);
+            Dv.z = 0.0;
+          }
+      }
+
       /* Compute the volume (in frequency domain) spanned by the matrix.
        * Note: this volume should always be positive.
        */

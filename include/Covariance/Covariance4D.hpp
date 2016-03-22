@@ -282,6 +282,36 @@ namespace Covariance {
 
 
       ////////////////////////
+      //    Matrix inverse  //
+      ////////////////////////
+
+      /* Compute the inverse of the covariance matrix.
+       *
+       * We add an epsilon to the diagonal in order to ensure that the matrix
+       * can be inverted.
+       *
+       * 'inverse' needs to be a 4x4 preallocated matrix (16 Floats)..
+       */
+      void InverseMatrix(Float* inverse) const {
+         // Compute the inverse matrix. We need to add an epsilon to the
+         // diagonal in order to ensure that the matrix can be inverted.
+         inverse[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
+         inverse[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
+         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
+         inverse[10] = matrix[ 5] + COV_MIN_FLOAT;
+         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
+         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
+         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
+         inverse[15] = matrix[ 9] + COV_MIN_FLOAT;
+
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+      }
+
+
+
+      ////////////////////////
       // Product of signals //
       ////////////////////////
 
@@ -407,21 +437,9 @@ namespace Covariance {
        *  equivalent ray differential [Igehy 1999].
        */
       void Extent(Vector& Dx, Vector& Dy, Vector& Du, Vector& Dv) const {
-         // Compute the inverse matrix. We need to add an epsilon to the
-         // diagonal in order to ensure that the matrix can be inverted.
+         // Compute the inverse matrix. 
          Float inverse[16];
-         inverse[ 0] = matrix[ 0] + COV_MIN_FLOAT;
-         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
-         inverse[ 5] = matrix[ 2] + COV_MIN_FLOAT;
-         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
-         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
-         inverse[10] = matrix[ 5] + COV_MIN_FLOAT;
-         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
-         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
-         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
-         inverse[15] = matrix[ 9] + COV_MIN_FLOAT;
-
-         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+         this->InverseMatrix(inverse);
 
           // T = trace and D = det of the spatial submatrix
           Float T = inverse[0]+inverse[5];
@@ -587,6 +605,52 @@ namespace Covariance {
             Dy.y = sqrt(inverse[5])/(2.0*M_PI);
             Dy.z = 0.0;
           }
+      }
+
+
+      /////////////////////
+      // Angular Filters //
+      /////////////////////
+
+      /* Compute the angular filter in primal space. The angular filter is
+       * the 2D Gaussian parameters 'suu', 'suv', 'svv' such that the filter
+       * is written as:
+       *        f(u,v) = exp(- 0.5 (suu u^2 + 2 suv u v + svv v^2))
+       * in the local tangent frame or directions..
+       *
+       * This resumes to computing the inverse of the spatial submatrix from
+       * the inverse covariance matrix in frequency space.
+       */
+      void AngularFilter(Float& suu, Float& suv, Float& svv) const {
+
+         // Compute the inverse matrix. We need to add an epsilon to the
+         // diagonal in order to ensure that the matrix can be inverted.
+         Float inverse[16];
+         inverse[ 0] = matrix[ 0] + COV_MIN_FLOAT;
+         inverse[ 1] = matrix[ 1]; inverse[ 4] = matrix[ 1];
+         inverse[ 5] = matrix[ 2] + COV_MIN_FLOAT;
+         inverse[ 2] = matrix[ 3]; inverse[ 8] = matrix[ 3];
+         inverse[ 6] = matrix[ 4]; inverse[ 9] = matrix[ 4];
+         inverse[10] = matrix[ 5] + COV_MIN_FLOAT;
+         inverse[ 3] = matrix[ 6]; inverse[12] = matrix[ 6];
+         inverse[ 7] = matrix[ 7]; inverse[13] = matrix[ 7];
+         inverse[11] = matrix[ 8]; inverse[14] = matrix[ 8];
+         inverse[15] = matrix[ 9] + COV_MIN_FLOAT;
+
+         if(!Inverse<Float>(inverse, 4)) { throw 1; }
+
+         // The outgoing filter is the inverse submatrix of this inverse
+         // matrix.
+         Float det = (matrix[5]*matrix[9]-matrix[8]*matrix[8]) / pow(2.0*M_PI,2);
+         if(det > 0.0) {
+            suu =  matrix[9] / det;
+            svv =  matrix[5] / det;
+            suv = -matrix[8] / det;
+         } else {
+            suu = COV_MAX_FLOAT;
+            svv = COV_MAX_FLOAT;
+            suv = 0.0;
+         }
       }
 
       /*  Compute the angular extent of the angular component of the equivalent

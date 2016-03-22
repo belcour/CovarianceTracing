@@ -354,6 +354,97 @@ namespace Covariance {
          matrix[ 9] = inverse[15];
       }
 
+
+      ////////////////////////////
+      // Spatio-angular Filters //
+      ////////////////////////////
+
+      /*  Compute the spatio-angular extent of the space related to the
+       *  covariance matrix's filter. The extent is provided as vectors
+       *  'Dx', 'Dy', and 'Du', 'Dv'. Those vectors are the main axis of
+       *  the filter's fooprint.
+
+       *  Vector like 'Dx' and 'Dy' are expressed in the local tangent frame
+       *  x, y using the first two components:
+       *         Dx = [x, y, 0]
+
+       *  To extract Dx, Dy, Du and Dv, we do an eigen-decomposition of the
+       *  covariance matrix and use the normalized eigen-vectors as the axis
+       *  of the extent and the eigen-values are the squared extent of the
+       *  polygonal shape.
+       *
+       *  This spatio-angular polygonal shape can be used to specify an
+       *  equivalent ray differential [Igehy 1999].
+       */
+      void Extent(Vector& Dx, Vector& Dy, Vector& Du, Vector& Dv) const {
+          // T = trace and D = det of the spatial submatrix
+          Float T = matrix[0]+matrix[2];
+          Float D = matrix[0]*matrix[2] - matrix[1]*matrix[1];
+
+          // Solve the 2nd order polynomial roots of p(l) = l^2 - l T + D.
+          // This gives us the eigen values.
+          Float d  = 0.25*T*T - D;
+          if(d < 0.0) { throw 1; } // No solution exists
+          Float l1 = 0.5*T + sqrt(d);
+          Float l2 = 0.5*T - sqrt(d);
+
+          if(abs(matrix[1]) > COV_MIN_FLOAT) {
+            Dx.x = l1 - matrix[2];
+            Dx.y = matrix[1];
+            Dx.z = 0.0;
+            Dy.x = l2 - matrix[2];
+            Dy.y = matrix[1];
+            Dy.z = 0.0;
+
+            Dx.Normalize();
+            Dy.Normalize();
+
+            Dx = sqrt(l1)/(2.0*M_PI) * Dx;
+            Dy = sqrt(l2)/(2.0*M_PI) * Dy;
+          } else {
+            Dx.x = sqrt(matrix[0])/(2.0*M_PI);
+            Dx.y = 0.0;
+            Dx.z = 0.0;
+            Dy.x = 0.0;
+            Dy.y = sqrt(matrix[2])/(2.0*M_PI);
+            Dy.z = 0.0;
+          }
+
+          // T = trace and D = det of the angluar submatrix
+          T = matrix[5]+matrix[9];
+          D = matrix[5]*matrix[9] - matrix[8]*matrix[8];
+
+          // Solve the 2nd order polynomial roots of p(l) = l^2 - l T + D.
+          // This gives us the eigen values.
+          d  = 0.25*T*T - D;
+          if(d < 0.0) { throw 1; } // No solution exists
+          l1 = 0.5*T + sqrt(d);
+          l2 = 0.5*T - sqrt(d);
+
+          if(abs(matrix[8]) > COV_MIN_FLOAT) {
+            Du.x = l1 - matrix[9];
+            Du.y = matrix[8];
+            Du.z = 0.0;
+            Dv.x = l2 - matrix[9];
+            Dv.y = matrix[8];
+            Dv.z = 0.0;
+
+            Du.Normalize();
+            Dv.Normalize();
+
+            Du = sqrt(l1)/(2.0*M_PI) * Du;
+            Dv = sqrt(l2)/(2.0*M_PI) * Dv;
+          } else {
+            Du.x = sqrt(matrix[5])/(2.0*M_PI);
+            Du.y = 0.0;
+            Du.z = 0.0;
+            Dv.x = 0.0;
+            Dv.y = sqrt(matrix[9])/(2.0*M_PI);
+            Dv.z = 0.0;
+          }
+      }
+
+
       /////////////////////
       // Spatial Filters //
       /////////////////////

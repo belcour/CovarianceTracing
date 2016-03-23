@@ -6,147 +6,14 @@
 #include <string>
 #include <iostream>
 #include <sstream>
-#include <algorithm>
 #include <thread>
 
-std::default_random_engine gen;
-std::uniform_real_distribution<double> dist(0,1);
-
 // Local includes
-#define _USE_MATH_DEFINES
 #include "common.hpp"
 #include "opengl.hpp"
-
-// Scene description
-Material phongH(Vector(), Vector(), Vector(1,1,1)*.999, 1.E3);
-Material phongL(Vector(), Vector(), Vector(1,1,1)*.999, 1.E2);
-
-std::vector<Sphere> spheres = {
-   Sphere(Vector(27,16.5,47),        16.5, phongH),//RightSp
-   Sphere(Vector(73,16.5,78),        16.5, phongL),//LeftSp
-   Sphere(Vector( 1e5+1,40.8,81.6),  1e5,  Vector(),Vector(.75,.25,.25)),//Left
-   Sphere(Vector(-1e5+99,40.8,81.6), 1e5,  Vector(),Vector(.25,.25,.75)),//Rght
-   Sphere(Vector(50,40.8, 1e5),      1e5,  Vector(),Vector(.75,.75,.75)),//Back
-   Sphere(Vector(50,40.8,-1e5+170),  1e5,  Vector(),Vector()           ),//Frnt
-   Sphere(Vector(50, 1e5, 81.6),     1e5,  Vector(),Vector(.75,.75,.75)),//Botm
-   Sphere(Vector(50,-1e5+81.6,81.6), 1e5,  Vector(),Vector(.75,.75,.75)),//Top
-   Sphere(Vector(50,681.6-.27,81.6), 600,  Vector(12,12,12),  Vector()) //Lite
-};
-
-// Texture for the bcg_img + size
-int   width = 512, height = 512;
-bool  generateBackground = true;
-bool  displayBackground  = true;
-bool  generateCovariance = true;
-bool  useCovFilter       = true;
-bool  generateReference  = false;
-int   nPasses            = 0;
-int   nPassesFilter      = 0;
-float filterRadius       = 1.0f;
-
-ShaderProgram* program;
-
-// Different buffer, the background image, the covariance filter and the brute
-// force filter.
-GLuint texs_id[3];
-float* bcg_img = new float[width*height]; float bcg_scale = 1.0f;
-float* cov_img = new float[width*height]; float cov_scale = 1.0f;
-float* ref_img = new float[width*height]; float ref_scale = 1.0f;
-
-// Camera frame
-Ray cam(Vector(50,52,295.6), Vector(0,-0.042612,-1).Normalize());
-double fov  = 1.2;
-Vector  cx  = Vector(width*fov/height);
-Vector  cy  = Vector::Cross(cx, cam.d).Normalize()*fov;
-Vector ncx  = cx;
-Vector ncy  = cy;
+#include "tutorial2.hpp"
 
 std::stringstream sout;
-
-void ExportImage() {
-   Vector* img = new Vector[width*height];
-   int x = width*mouse.X, y = height*mouse.Y;
-   #pragma omp parallel for schedule(dynamic, 1)
-   for(int i=0; i<width; ++i) {
-      for(int j=0; j<height; ++j) {
-         int id = i + j*width;
-         int di = i + (height-j)*width;
-
-         bool filter = ((abs(j-x)-4 < 0 && i==y) || (abs(i-y)-4 < 0 && j==x)) &&
-                       (generateReference || generateCovariance);
-
-         // Background img
-         img[id] = (displayBackground) ? bcg_img[di]*Vector(1,1,1) : Vector(0,0,0);
-
-         // Adding the filters
-         img[id].x += generateCovariance ? cov_scale*cov_img[di] : 0.0f;
-         img[id].y += generateReference  ? ref_scale*ref_img[di] : 0.0f;
-         img[id].z += (filter ? 1.0f : 0.0f);
-      }
-   }
-
-   int ret = SaveEXR(img, width, height, "output.exr");
-   if(ret != 0) { std::cerr << "Unable to export image" << std::endl; }
-}
-
-void KeyboardKeys(unsigned char key, int x, int y) {
-   if(key == 'c') {
-      memset(cov_img, 0.0, width*height);
-      generateCovariance = !generateCovariance;
-   } else if(key == 'B') {
-      generateReference = !generateReference;
-   } else if(key == 'b') {
-      generateBackground = !generateBackground;
-   } else if(key == 'h') {
-      displayBackground  = !displayBackground;
-   } else if(key == 'f') {
-       useCovFilter = !useCovFilter;
-   } else if(key == '+') {
-      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, spheres[1].mat.exponent * 10);
-      spheres[1].mat = phong;
-      nPasses = 0;
-   } else if(key == '-') {
-      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, fmax(spheres[1].mat.exponent / 10, 1.0));
-      spheres[1].mat = phong;
-      nPasses = 0;
-   } else if(key == 'p') {
-      ExportImage();
-   } else if(key == 'd') {
-      std::cout << sout.str() << std::endl;
-   }
-   glutPostRedisplay();
-}
-
-void RadianceTexture() {
-
-   // Loop over the rows and columns of the image and evaluate radiance and
-   // covariance per pixel using Monte-Carlo.
-   #pragma omp parallel for schedule(dynamic, 1)
-   for (int y=0; y<height; y++){
-      Random rng(y + height*clock());
-
-      for (int x=0; x<width; x++) {
-         int i=(width-x-1)*height+y;
-
-         // Create the RNG and get the sub-pixel sample
-         float dx = rng();
-         float dy = rng();
-
-         // Generate the pixel direction
-         Vector d = cx*((dx + x)/float(width)  - .5) +
-                    cy*((dy + y)/float(height) - .5) + cam.d;
-         d.Normalize();
-
-         Ray ray(cam.o, d);
-         Vector radiance = Radiance(spheres, ray, rng, 0, 1);
-
-         bcg_img[i] = (float(nPasses)*bcg_img[i] + Vector::Dot(radiance, Vector(1,1,1))/3.0f) / float(nPasses+1);
-      }
-   }
-
-   ++nPasses;
-   glutPostRedisplay();
-}
 
 PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
                         const Cov4D& cov, int depth, int maxdepth,
@@ -226,6 +93,10 @@ PosCov CovarianceFilter(const std::vector<Sphere>& spheres, const Ray &r,
    }
 }
 
+// Should the covariance image display the Gaussian filter or the equivalent
+// ray differential's footprint?
+bool useCovFilter = true;
+
 void CovarianceTexture() {
    // Generate a covariance matrix at the sampling position
    int x = width*mouse.X, y = height*mouse.Y;
@@ -290,123 +161,37 @@ void CovarianceTexture() {
    }
 }
 
-using PosFilter = std::pair<Vector, Vector>;
+ShaderProgram* program;
 
-PosFilter indirect_filter(const Ray &r, Random& rng, int depth, int maxdepth=2){
-   double t;                               // distance to Intersection
-   int id=0;                               // id of Intersected object
-   if (!Intersect(spheres, r, t, id)) return PosFilter(Vector(), Vector()); // if miss, return black
-   const Sphere&   obj = spheres[id];      // the hit object
-   const Material& mat = obj.mat;          // Its material
-   Vector x  = r.o+r.d*t,
-          n  = (x-obj.c).Normalize(),
-          nl = Vector::Dot(n,r.d) < 0 ? n:n*-1;
+// Different buffer, the background image, the covariance filter and the brute
+// force filter.
+GLuint texs_id[3];
 
-   // Once you reach the max depth, return the hit position and the filter's
-   // value using the recursive form.
-   if(depth >= maxdepth) {
-      return PosFilter(x, Vector(1.0f, 1.0f, 1.0f));
-
-   // Main covariance computation. First this code generate a new direction
-   // and query the covariance+radiance in that direction. Then, it computes
-   // the covariance after the reflection/refraction.
-   } else {
-      /* Sampling a new direction + recursive call */
-      double pdf;
-      const auto e   = Vector(rng(), rng(), rng());
-      const auto wo  = -r.d;
-      const auto wi  = mat.Sample(wo, nl, e, pdf);
-            auto f   = Vector::Dot(wi, nl)*mat.Reflectance(wi, wo, nl);
-      const auto res = indirect_filter(Ray(x, wi), rng, depth+1, maxdepth);
-      return PosFilter(res.first, (1.f/pdf) * f.Multiply(res.second));
+void KeyboardKeys(unsigned char key, int x, int y) {
+   if(key == 'c') {
+      memset(cov_img, 0.0, width*height);
+      generateCovariance = !generateCovariance;
+   } else if(key == 'B') {
+      generateReference = !generateReference;
+   } else if(key == 'b') {
+      generateBackground = !generateBackground;
+   } else if(key == 'h') {
+      displayBackground  = !displayBackground;
+   } else if(key == 'f') {
+       useCovFilter = !useCovFilter;
+   } else if(key == '+') {
+      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, spheres[1].mat.exponent * 10);
+      spheres[1].mat = phong;
+      nPasses = 0;
+   } else if(key == '-') {
+      Material phong(Vector(), Vector(), Vector(1,1,1)*.999, fmax(spheres[1].mat.exponent / 10, 1.0));
+      spheres[1].mat = phong;
+      nPasses = 0;
+   } else if(key == 'p') {
+      ExportImage(width*mouse.X, height*mouse.Y);
+   } else if(key == 'd') {
+      std::cout << sout.str() << std::endl;
    }
-}
-
-void BruteForceTexture(int samps = 1000) {
-
-   std::vector<PosFilter> _filter_elems;
-
-   // Check pixel position and clean the filter if there was any motion of the
-   // mouse.
-   int x = width*mouse.X, y = height*mouse.Y;
-   if(fabs(mouse.Dx) > 0.0f || fabs(mouse.Dy) > 0.0f) {
-      nPassesFilter = 0;
-      filterRadius  = 1.0f;
-   }
-
-   // Sub pixel sampling
-   const int nthread = std::thread::hardware_concurrency();
-   #pragma omp parallel for schedule(dynamic, 1)
-   for(int t=0; t<nthread; ++t) {
-      Random rng(t + nthread*clock());
-
-      for(int s=0; s<samps/nthread; s++){
-
-         // Create the RNG and get the sub-pixel sample
-         float dx = rng();
-         float dy = rng();
-
-         // Generate the pixel direction
-         Vector d = cx*((dx + x)/width  - .5) +
-            cy*((dy + y)/height - .5) + cam.d;
-         d.Normalize();
-
-         // Evaluate the Covariance and Radiance at the pixel location
-         const auto filter = indirect_filter(Ray(cam.o, d), rng, 0, 1);
-         #pragma omp critical
-         {
-            _filter_elems.push_back(filter);
-         }
-      }
-   }
-
-   // Loop over the rows and columns of the image and evaluate radiance and
-   // covariance per pixel using Monte-Carlo.
-   float max_ref = 0.0f;
-   #pragma omp parallel for schedule(dynamic, 1), shared(max_ref)
-   for (int y=0; y<height; y++){
-      float max_temp = 0.0f;
-
-      for (int x=0; x<width; x++) {
-         int i=(width-x-1)*height+y;
-         float _r = 0.0f;
-
-         // Generate the pixel direction
-         Vector d = cx*((0.5 + x)/width  - .5) +
-                    cy*((0.5 + y)/height - .5) + cam.d;
-         d.Normalize();
-
-         Ray ray(cam.o, d);
-         double t; int id;
-         if(!Intersect(spheres, ray, t, id)){ continue; }
-         Vector hitp = ray.o + t*ray.d;
-
-         for(auto& elem : _filter_elems) {
-            const auto& p = elem.first;
-            const auto  x = Vector::Norm(hitp-p) / filterRadius;
-            _r += (0.3989422804f/filterRadius) * exp(-0.5f * pow(x, 2)) * elem.second.x;
-         }
-
-         const auto scale = 20.f;
-         const auto Nold  = nPassesFilter * samps;
-         const auto Nnew  = (nPassesFilter+1) * samps;
-         ref_img[i] = (ref_img[i]*Nold + scale*_r) / float(Nnew);
-         max_temp   = std::max(ref_img[i], max_temp);
-      }
-
-      #pragma omp critical
-      {
-         max_ref = std::max(max_ref, max_temp);
-      }
-   }
-
-   // Update the scaling
-   ref_scale = 1.0f/max_ref;
-
-   // Progressive refinement of the radius and number of passes
-   filterRadius *= sqrt((nPassesFilter + 0.8) / (nPassesFilter + 1.0));
-   ++nPassesFilter;
-
    glutPostRedisplay();
 }
 
@@ -431,7 +216,12 @@ void Draw() {
    }
 
    if(generateReference) {
-      BruteForceTexture();
+
+      if(fabs(mouse.Dx) > 0.0f || fabs(mouse.Dy) > 0.0f) {
+         nPassesFilter = 0;
+         filterRadius  = 1.0f;
+      }
+      BruteForceTexture(width*mouse.X, height*mouse.Y);
 
       glActiveTexture(GL_TEXTURE2);
       glBindTexture(GL_TEXTURE_2D, texs_id[2]);
@@ -467,6 +257,10 @@ void Draw() {
    glEnd();
    program->disable();
    glutSwapBuffers();
+
+   if(generateReference || generateBackground || generateCovariance) {
+      glutPostRedisplay();
+   }
 }
 
 // Create geometry and textures
@@ -550,9 +344,6 @@ void PrintHelp() {
 }
 
 int main(int argc, char** argv) {
-   cam.o = cam.o + 140.0*cam.d;
-   ncx.Normalize();
-   ncy.Normalize();
 
    mouse.X = 0.5;
    mouse.Y = 0.5;

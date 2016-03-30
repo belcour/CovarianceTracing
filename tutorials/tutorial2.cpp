@@ -159,8 +159,11 @@ void CovarianceTexture(int x, int y) {
 }
 
 void PrintHelp() {
-   std::cout << "Covariance Tracing tutorial 2" << std::endl;
-   std::cout << "Usage: ./CovFiltering" << std::endl;
+   std::cout << "Usage: ./Tutorial2 [generateRef] [hideBackground]" << std::endl << std::endl;
+   std::cout << "This example will progressively output the image of the indirect pixel "
+             << "for the blue pixel using covariance tracing. It is possible to output "
+             << "a brute force evaluation of the indirect pixel filter using 'generateRef'"
+             << "or to hide the background image using 'hideBackground'" << std::endl;
 }
 
 int main(int argc, char** argv) {
@@ -171,7 +174,15 @@ int main(int argc, char** argv) {
    int spp=1000, npasses=10;
    int x=410, y=175;
 
-   //generateReference = true;
+   for(auto && str : std::vector<std::string> { argv, argv + argc }) {
+      if(str.compare("generateRef") == 0) {
+         generateReference = true;
+      }
+
+      if(str.compare("hideBackground") == 0) {
+         generateBackground = false;
+      }
+   }
 
    // Display the covariance filter
    if(generateCovariance) {

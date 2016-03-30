@@ -8,7 +8,6 @@ std::default_random_engine gen;
 std::uniform_real_distribution<double> dist(0,1);
 
 // Local includes
-#define _USE_MATH_DEFINES
 #include "common.hpp"
 
 // Covariance Tracing includes
@@ -38,7 +37,7 @@ RadCov radiance(const Ray &r, int depth, int maxdepth=1){
    if (!Intersect(spheres, r, t, id)) return RadCov(Vector(), Cov()); // if miss, return black
    const Sphere&   obj = spheres[id];      // the hit object
    const Material& mat = obj.mat;          // Its material
-   
+
    Vector x  = r.o+r.d*t;
    Vector n  = (x-obj.c).Normalize();
    Vector nl = (Vector::Dot(n, r.d) < 0.f) ? n : (-1.f)*n;
@@ -149,10 +148,10 @@ int main(int argc, char** argv){
                   const Vector px = (ncx - Vector::Dot(d, ncx)*d).Normalize(),
                                py = (ncy - Vector::Dot(d, ncy)*d).Normalize();
                   const double scaleX = Vector::Norm(ncx) / double(w),
-                              scaleY = Vector::Norm(ncy) / double(h);
+                               scaleY = Vector::Norm(ncy) / double(h);
 
                   // Evaluate the Covariance and Radiance at the pixel location
-                  auto radcov = radiance(Ray(cam.o, d),0);
+                  auto radcov = radiance(Ray(cam.o, d), 0);
                   auto rad = radcov.first;
                   auto cov = radcov.second;
 
@@ -177,12 +176,14 @@ int main(int argc, char** argv){
                //c = Vector(std::fabs(_cov.matrix[5]),
                //           std::fabs(_cov.matrix[8]),
                //           std::fabs(_cov.matrix[9]));
+               //_cov.AngularFilter(c.x, c.y, c.z);
 
                //  2) The spatial part of the covariance
                //c = Vector(std::fabs(_cov.matrix[0]),
                //           std::fabs(_cov.matrix[1]),
                //           std::fabs(_cov.matrix[2]));
                //c = Vector(std::fabs(cr), 0.0, std::fabs(sr));
+               //_cov.SpatialFilter(c.x, c.y, c.z);
 
                //  3) Predicted sampling density. This is what Belcour et al.
                //  [2013] used to generate the image space adaptive sampling.
@@ -192,7 +193,7 @@ int main(int argc, char** argv){
                c = Vector(den, den, den);
 
                //  4) Radiance
-               c = _r;
+               //c = _r;
 
                img[i] = img[i] + c*.25;
             }

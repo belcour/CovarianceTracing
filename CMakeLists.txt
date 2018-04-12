@@ -14,6 +14,7 @@ include_directories ("include" "modules" ".")
 # Add dependencies
 find_package(OpenGL)
 find_package(GLUT)
+find_package(OpenMP)
 
 # Add main test suite
 add_executable (TestCovariance4D    tests/Covariance4D.cpp)
@@ -37,3 +38,15 @@ if(OPENGL_FOUND AND GLUT_FOUND)
    target_compile_features(Tutorial2gl PRIVATE cxx_range_for)
    target_link_libraries(Tutorial2gl ${OPENGL_gl_LIBRARY} ${GLUT_glut_LIBRARY})
 endif(OPENGL_FOUND AND GLUT_FOUND)
+
+# Add OpenMP support
+if ( OPENMP_FOUND )
+	target_compile_options(Tutorial1   PUBLIC ${OpenMP_CXX_FLAGS})
+	target_compile_options(Tutorial2   PUBLIC ${OpenMP_CXX_FLAGS})
+	target_compile_options(Tutorial2gl PUBLIC ${OpenMP_CXX_FLAGS})
+	if (NOT WIN32 )
+		set_target_properties(Tutorial1   PROPERTIES LINK_FLAGS ${OpenMP_CXX_FLAGS})
+		set_target_properties(Tutorial2   PROPERTIES LINK_FLAGS ${OpenMP_CXX_FLAGS})
+		set_target_properties(Tutorial2gl PROPERTIES LINK_FLAGS ${OpenMP_CXX_FLAGS})
+	endif (NOT WIN32 )
+endif( OPENMP_FOUND )
